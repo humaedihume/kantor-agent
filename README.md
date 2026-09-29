@@ -56,11 +56,11 @@ yang nyata — tanpa data karangan, tanpa login, tanpa konfigurasi.
 ## Mulai cepat (plugin)
 Di Claude Code (sesi mana pun):
 ```text
-/plugin marketplace add sambu-la/kantor-agent
+/plugin marketplace add humaedihume/kantor-agent
 /plugin install kantor-agent@kantor-agent
 /reload-plugins
 ```
-Atau dari terminal: `claude plugin marketplace add sambu-la/kantor-agent && claude plugin install kantor-agent@kantor-agent`.
+Atau dari terminal: `claude plugin marketplace add humaedihume/kantor-agent && claude plugin install kantor-agent@kantor-agent`.
 
 Lalu, **di folder project yang ingin dipantau**:
 ```text
@@ -78,7 +78,7 @@ Buka URL itu di browser. Perintah lain: `/kantor-agent:kantor-agent status`, `�
 ## Pasang manual
 Tanpa sistem plugin — skill biasa bernama `/kantor-agent`:
 ```bash
-git clone https://github.com/sambu-la/kantor-agent.git
+git clone https://github.com/humaedihume/kantor-agent.git
 mkdir -p ~/.claude/skills
 ln -s "$PWD/kantor-agent/skills/kantor-agent" ~/.claude/skills/kantor-agent   # atau: cp -R … ~/.claude/skills/
 ```
@@ -254,12 +254,12 @@ perangkat lain).
 3. Hapus cache & log: `rm -rf ~/.cache/kantor-agent`. Bila pernah membuat `.claude/kantor-agent.json`, hapus juga.
 
 ## Kontribusi
-Issue dan pull request dipersilakan di [github.com/sambu-la/kantor-agent](https://github.com/sambu-la/kantor-agent).
+Issue dan pull request dipersilakan di [github.com/humaedihume/kantor-agent](https://github.com/humaedihume/kantor-agent).
 - Logika server ada di **dua** runtime: ubah `lib/node/*.mjs` **dan** `lib/php/*.php`, lalu jalankan
   `node skills/kantor-agent/runtime/bin/parity.mjs --project=<project-uji>` (harus `PARITY OK`).
 - Validasi plugin: `claude plugin validate --strict .`.
 - Jangan pernah menyertakan transkrip, path, atau data project nyata di contoh/tangkapan layar.
 
 ## Lisensi
-[MIT](LICENSE) © sambu-la. Komponen pihak ketiga yang disertakan (three.js r170 — MIT) tercantum di
+[MIT](LICENSE) © humaedihume. Komponen pihak ketiga yang disertakan (three.js r170 — MIT) tercantum di
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

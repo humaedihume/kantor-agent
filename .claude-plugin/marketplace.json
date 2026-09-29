@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "kantor-agent",
   "description": "Marketplace untuk plugin Kantor Agent — kantor 3D yang menampilkan Claude dan subagent-nya bekerja.",
-  "owner": { "name": "sambu-la", "url": "https://github.com/sambu-la" },
+  "owner": { "name": "humaedihume", "url": "https://github.com/humaedihume" },
   "plugins": [
     {
       "name": "kantor-agent",
