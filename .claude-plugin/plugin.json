@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "kantor-agent",
+  "displayName": "Kantor Agent",
+  "version": "1.0.0",
+  "description": "Kantor 3D tanpa konfigurasi: Ketua (sesi utama Claude) bekerja di mejanya, 4 anggota tim santai di lounge lalu duduk bekerja saat Claude memanggil subagent, dan freelancer datang lewat pintu bila tim penuh — semuanya dari transkrip nyata. Node ≥ 18 atau PHP ≥ 8.1.",
+  "author": { "name": "sambu-la", "url": "https://github.com/sambu-la" },
+  "homepage": "https://github.com/sambu-la/kantor-agent#readme",
+  "repository": "https://github.com/sambu-la/kantor-agent",
+  "license": "MIT",
+  "keywords": ["claude-code", "subagents", "dashboard", "three.js", "visualization", "monitoring", "indonesia"]
+}

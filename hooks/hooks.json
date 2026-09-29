@@ -1,0 +1,16 @@
+{
+  "description": "Kantor Agent: menyalakan server kantor otomatis saat sesi dimulai — HANYA bila diaktifkan (\"autostart\": true di .claude/kantor-agent.json atau KANTOR_AUTOSTART=1). Tanpa itu hook ini langsung selesai tanpa efek dan tanpa output.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/skills/kantor-agent/runtime/bin/kantor.sh\" autostart",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

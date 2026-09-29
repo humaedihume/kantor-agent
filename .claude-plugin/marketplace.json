@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "kantor-agent",
+  "description": "Marketplace untuk plugin Kantor Agent — kantor 3D yang menampilkan Claude dan subagent-nya bekerja.",
+  "owner": { "name": "sambu-la", "url": "https://github.com/sambu-la" },
+  "plugins": [
+    {
+      "name": "kantor-agent",
+      "source": ".",
+      "description": "Kantor 3D tanpa konfigurasi: Ketua + tim 4 orang + freelancer, digerakkan transkrip Claude Code nyata.",
+      "category": "productivity",
+      "tags": ["subagents", "dashboard", "three.js", "visualization"]
+    }
+  ]
+}

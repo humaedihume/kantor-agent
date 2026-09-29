@@ -1,0 +1,17 @@
+{
+  "_catatan": "Nilai bawaan Kantor Agent — dibaca sama persis oleh server Node (lib/node) dan PHP (lib/php). Penimpaan opsional per project: <project>/.claude/kantor-agent.json (lihat README).",
+  "ketua": "Joko",
+  "team": ["Budi", "Sari", "Agus", "Rina"],
+  "freelancers": ["Yoga", "Dewi", "Rudi", "Maya", "Eko", "Nina", "Fajar", "Wulan", "Dimas", "Lestari", "Hendra", "Tika"],
+  "colors": {
+    "ketua": "#6a55c9",
+    "team": ["#3f6fd1", "#2f9a6d", "#d9772f", "#c2417a"],
+    "freelancers": ["#0f8fa3", "#9a7418", "#4f7d3a", "#8a4fa8", "#3d7f9e", "#b8452f"]
+  },
+  "window_days": 7,
+  "running_window": 900,
+  "main_active": 90,
+  "cooldown": 60,
+  "spare_desks": 4,
+  "mains_max": 40
+}
