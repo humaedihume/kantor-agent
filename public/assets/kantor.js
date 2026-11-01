@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { freelancerGender, genderedLook } from './character-gender.js';
 
 const API = '/kerja/api/state';
 const POLL_MS = 3000;
@@ -13,6 +14,9 @@ const CFG = window.KANTOR || {};
 const TEAM_NAMES = Array.isArray(CFG.team) && CFG.team.length === 4 ? CFG.team : ['Budi', 'Sari', 'Agus', 'Rina'];
 const KETUA_NAME = typeof CFG.ketua === 'string' ? CFG.ketua : 'Joko';
 const ROLES = Array.isArray(CFG.roles) && CFG.roles.length === 5 ? CFG.roles : ['Ketua', 'Product', 'Engineer', 'QA', 'Ops'];
+const GENDERS = Array.isArray(CFG.genders) && CFG.genders.length === 5 && CFG.genders.every((g) => g === 'male' || g === 'female')
+  ? CFG.genders
+  : ['male', 'male', 'male', 'female', 'male'];
 const COLORS = CFG.colors || { ketua: '#6a55c9', team: ['#3f6fd1', '#2f9a6d', '#d9772f', '#c2417a'], freelancers: ['#0f8fa3'] };
 const NAMES_SIG = [KETUA_NAME, ...TEAM_NAMES].join('|');
 const SPARE = Math.max(0, Math.min(4, Number(CFG.spare_desks) || 4));
@@ -844,21 +848,20 @@ const LOOKS = {
   ketua: { shirt: '#6f5bbd', pants: '#2d3140', skin: '#b97d52', hair: '#221a15', hairStyle: 'side', tie: true },
   team: [
     { shirt: '#4d7fd6', pants: '#3a4150', skin: '#c68a5e', hair: '#2a211c', hairStyle: 'short', glasses: true },
-    { shirt: '#3a9b72', pants: '#2e333d', skin: '#d6a07a', hair: '#3b2a1f', hairStyle: 'bun' },
-    { shirt: '#e38b4f', pants: '#4a4f5c', skin: '#a86e45', hair: '#191310', hairStyle: 'curly', headphones: true },
-    { shirt: '#cf5a90', pants: '#34384a', skin: '#e0b08a', hair: '#5a3a22', hairStyle: 'long' },
+    { shirt: '#3a9b72', pants: '#2e333d', skin: '#d6a07a', hair: '#3b2a1f', hairStyle: 'curly', headphones: true },
+    { shirt: '#cf5a90', pants: '#34384a', skin: '#e0b08a', hair: '#5a3a22', hairStyle: 'long', glasses: true },
+    { shirt: '#e38b4f', pants: '#4a4f5c', skin: '#a86e45', hair: '#191310', hairStyle: 'side' },
   ],
 };
 function freelancerLook(name, color) {
   const r = rng(hash(name));
   const skins = ['#e0b08a', '#c68a5e', '#a86e45', '#8d5a3b', '#d6a07a', '#b07650'];
   const hairs = ['#140f0c', '#2b2016', '#5a3a22', '#3b2a1f', '#1c1512'];
-  const styles = ['short', 'curly', 'bun', 'side', 'long'];
-  return {
+  return genderedLook({
     shirt: lighten(color, 0.12), pants: ['#303542', '#3a3f4a', '#2f3440', '#4a4f5c'][Math.floor(r() * 4)],
-    skin: skins[Math.floor(r() * skins.length)], hair: hairs[Math.floor(r() * hairs.length)], hairStyle: styles[Math.floor(r() * styles.length)],
+    skin: skins[Math.floor(r() * skins.length)], hair: hairs[Math.floor(r() * hairs.length)],
     glasses: r() > 0.6, backpack: true,
-  };
+  }, freelancerGender(name), hash(name));
 }
 function lighten(hex, k = 0.14) {
   const c = new THREE.Color(hex);
@@ -866,6 +869,7 @@ function lighten(hex, k = 0.14) {
   return `#${c.getHexString()}`;
 }
 function buildPerson(cfg, key) {
+  const female = cfg.gender === 'female';
   const root = new THREE.Group();
   const hips = new THREE.Group();
   hips.position.y = 0.9;
@@ -882,12 +886,12 @@ function buildPerson(cfg, key) {
     m.userData.key = key;
     return m;
   };
-  hips.add(tag(mesh(box(0.34, 0.17, 0.22, 0.07), pantsM)));
+  hips.add(tag(mesh(box(female ? 0.38 : 0.34, 0.17, 0.22, 0.07), pantsM)));
   const spine = new THREE.Group();
   spine.position.y = 0.06;
   hips.add(spine);
   const torso = tag(mesh(new THREE.CapsuleGeometry(0.16, 0.26, 6, 18), shirtM));
-  torso.scale.set(1.14, 1, 0.74);
+  torso.scale.set(female ? 1.04 : 1.14, female ? 0.98 : 1, 0.74);
   torso.position.y = 0.25;
   spine.add(torso);
   if (cfg.headphones) {
@@ -895,6 +899,18 @@ function buildPerson(cfg, key) {
     hood.position.set(0, 0.5, -0.08);
     hood.rotation.x = 1.2;
     spine.add(hood);
+  } else if (cfg.outfit === 'blouse') {
+    const blouseTrim = mat('#f4ece8', 0.7);
+    for (const s of [-1, 1]) {
+      const lapel = mesh(box(0.045, 0.2, 0.018, 0.006), blouseTrim);
+      lapel.position.set(s * 0.04, 0.39, 0.125);
+      lapel.rotation.z = s * 0.36;
+      lapel.rotation.x = -0.1;
+      spine.add(lapel);
+    }
+    const waist = mesh(box(0.25, 0.025, 0.16, 0.008), blouseTrim);
+    waist.position.set(0, 0.12, 0.015);
+    spine.add(waist);
   } else {
     const collar = mesh(new THREE.TorusGeometry(0.07, 0.022, 8, 18, Math.PI * 1.3), mat('#ffffff', 0.7));
     collar.position.set(0, 0.5, 0.01);
@@ -1003,7 +1019,7 @@ function buildPerson(cfg, key) {
   const hand = [];
   for (const s of [-1, 1]) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(s * 0.2, 0.44, 0);
+    shoulder.position.set(s * (female ? 0.18 : 0.2), 0.44, 0);
     spine.add(shoulder);
     const upper = tag(mesh(new THREE.CapsuleGeometry(0.05, 0.19, 4, 12), shirtM));
     upper.position.y = -0.14;
@@ -1484,8 +1500,8 @@ function workMode(a) {
 }
 
 // Ketua + 4 anggota tim selalu ada
-const KETUA = makeActor({ key: 'ketua', kind: 'ketua', name: KETUA_NAME, role: ROLES[0], color: COLORS.ketua, look: LOOKS.ketua, desk: 'A0' });
-const TEAM = TEAM_NAMES.map((n, i) => makeActor({ key: `tim-${i}`, kind: 'tim', idx: i, name: n, role: ROLES[i + 1], color: COLORS.team[i % COLORS.team.length], look: LOOKS.team[i], desk: `A${i + 1}` }));
+const KETUA = makeActor({ key: 'ketua', kind: 'ketua', name: KETUA_NAME, gender: GENDERS[0], role: ROLES[0], color: COLORS.ketua, look: genderedLook(LOOKS.ketua, GENDERS[0], hash(KETUA_NAME)), desk: 'A0' });
+const TEAM = TEAM_NAMES.map((n, i) => makeActor({ key: `tim-${i}`, kind: 'tim', idx: i, name: n, gender: GENDERS[i + 1], role: ROLES[i + 1], color: COLORS.team[i % COLORS.team.length], look: genderedLook(LOOKS.team[i], GENDERS[i + 1], hash(n)), desk: `A${i + 1}` }));
 
 // ---------------------------------------------------------------- lounge: tempat unik per aktor + obrolan
 const LOUNGE = { chatAt: performance.now() + 4000 };
@@ -1878,7 +1894,8 @@ function apply(d) {
     let a = actors.get(f.key);
     if (!a) {
       if (f.state !== 'bekerja') continue;
-      a = makeActor({ key: f.key, kind: 'freelancer', name: f.name, role: 'Freelancer', color: f.color, look: freelancerLook(f.name, f.color), desk: `B${f.desk}` });
+      const gender = freelancerGender(f.name);
+      a = makeActor({ key: f.key, kind: 'freelancer', name: f.name, gender, role: 'Freelancer', color: f.color, look: freelancerLook(f.name, f.color), desk: `B${f.desk}` });
       if (firstLoad) placeAt(a, `desk:B${f.desk}`);
       else {
         placeAt(a, 'door');

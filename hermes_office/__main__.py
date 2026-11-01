@@ -10,6 +10,18 @@ from .server import run_server
 from .state import build_state
 
 
+def validate_roster(roster):
+    expected_profiles = ["default", "product", "engineer", "qa", "ops"]
+    if not isinstance(roster, list) or len(roster) != len(expected_profiles):
+        raise ValueError("roster must contain exactly five permanent profiles")
+    if [member.get("profile") for member in roster if isinstance(member, dict)] != expected_profiles:
+        raise ValueError("roster profiles must be ordered as default, product, engineer, qa, ops")
+    for member in roster:
+        if member.get("gender") not in {"male", "female"}:
+            raise ValueError("every roster member must declare gender as male or female")
+    return roster
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hermes Office web dashboard")
     parser.add_argument("--config", type=Path, default=Path("config.json"))
@@ -26,13 +38,14 @@ def main() -> None:
     public_dir = (args.public_dir or project_root / "public").resolve()
     bind = args.bind or config.get("bind", "127.0.0.1")
     port = args.port or int(config.get("port", 8788))
-    roster = config["roster"]
+    roster = validate_roster(config["roster"])
 
     page_config = {
         "title": config["title"],
         "ketua": roster[0]["name"],
         "team": [member["name"] for member in roster[1:]],
         "roles": [member["role"] for member in roster],
+        "genders": [member["gender"] for member in roster],
         "colors": config["colors"],
         "spare_desks": int(config.get("spare_desks", 4)),
     }

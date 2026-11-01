@@ -4,11 +4,11 @@
   "port": 8788,
   "spare_desks": 4,
   "roster": [
-    {"profile": "default", "name": "Om Fit", "role": "Ketua / Orchestrator"},
-    {"profile": "product", "name": "Raka", "role": "Product Manager"},
-    {"profile": "engineer", "name": "Dimas", "role": "Software Engineer"},
-    {"profile": "qa", "name": "Naya", "role": "QA & Security"},
-    {"profile": "ops", "name": "Bayu", "role": "DevOps"}
+    {"profile": "default", "name": "Om Fit", "gender": "male", "role": "Ketua / Orchestrator"},
+    {"profile": "product", "name": "Raka", "gender": "male", "role": "Product Manager"},
+    {"profile": "engineer", "name": "Dimas", "gender": "male", "role": "Software Engineer"},
+    {"profile": "qa", "name": "Naya", "gender": "female", "role": "QA & Security"},
+    {"profile": "ops", "name": "Bayu", "gender": "male", "role": "DevOps"}
   ],
   "colors": {
     "ketua": "#6a55c9",
