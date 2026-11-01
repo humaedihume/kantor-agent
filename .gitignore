@@ -3,3 +3,7 @@ node_modules/
 *.log
 # data runtime tidak pernah ada di repo (disimpan di ~/.cache/kantor-agent/)
 .cache/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/

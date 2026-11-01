@@ -1,0 +1,1 @@
+"""Hermes Office activity projection."""
