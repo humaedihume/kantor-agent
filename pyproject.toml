@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-office"
+version = "0.1.0"
+description = "Read-only 3D office activity dashboard for Hermes Agent"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+[project.scripts]
+hermes-office = "hermes_office.__main__:main"
+
+[tool.setuptools]
+packages = ["hermes_office"]

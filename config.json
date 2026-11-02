@@ -1,0 +1,18 @@
+{
+  "title": "Kantor Internal Kanezza",
+  "bind": "127.0.0.1",
+  "port": 8788,
+  "spare_desks": 4,
+  "roster": [
+    {"profile": "default", "name": "Om Fit", "gender": "male", "role": "Ketua / Orchestrator"},
+    {"profile": "product", "name": "Raka", "gender": "male", "role": "Product Manager"},
+    {"profile": "engineer", "name": "Dimas", "gender": "male", "role": "Software Engineer"},
+    {"profile": "qa", "name": "Naya", "gender": "female", "role": "QA & Security"},
+    {"profile": "ops", "name": "Bayu", "gender": "male", "role": "DevOps"}
+  ],
+  "colors": {
+    "ketua": "#6a55c9",
+    "team": ["#3f6fd1", "#2f9a6d", "#c2417a", "#d9772f"],
+    "freelancers": ["#0f8fa3", "#9a7418", "#4f7d3a", "#8a4fa8", "#3d7f9e", "#b8452f"]
+  }
+}
