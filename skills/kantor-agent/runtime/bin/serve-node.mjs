@@ -208,7 +208,7 @@ async function opsApi(req, res, p) {
     const b = write ? await readBody(req) : {};
     const by = String(b.by || org.ceo.name || 'CEO');
     if (req.method === 'GET') {
-      if (p === '/kerja/api/ops/meta') return json(res, 200, { statuses: OPS.STATUSES, priorities: OPS.PRIORITIES, sub_statuses: OPS.SUB_STATUSES, stages: OPS.STAGES, checklists: OPS.CHECKLISTS, ceo: org.ceo.name, dir: OPS.opsDir() });
+      if (p === '/kerja/api/ops/meta') return json(res, 200, { statuses: OPS.STATUSES, priorities: OPS.PRIORITIES, sub_statuses: OPS.SUB_STATUSES, stages: OPS.STAGES, checklists: OPS.CHECKLISTS, stickers: OPS.STICKERS, moods: OPS.MOODS, ceo: org.ceo.name, dir: OPS.opsDir() });
       if (p === '/kerja/api/ops/overview') return json(res, 200, OPS.overview(org));
       if (p === '/kerja/api/ops/org') return json(res, 200, OPS.orgChart(org));
       if (p === '/kerja/api/ops/analytics') return json(res, 200, OPS.analytics(org));

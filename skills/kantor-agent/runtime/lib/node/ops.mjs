@@ -314,14 +314,33 @@ export function resolveRevision(id, by, note = '') {
 const ROOM = /^(company|ceo|div:[a-z0-9-]{1,60}|sub:[a-z0-9-]{1,60}:[a-z0-9-]{1,60}|task:TASK-\d{3,6})$/;
 export const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 const roomFile = (room) => path.join(chatDir(), `${room.replace(/:/g, '__')}.jsonl`);
+// stiker: emoji besar + teks, tanpa file gambar
+export const STICKERS = {
+  semangat: ['💪', 'Semangat!'], siap: ['🫡', 'Siap laksanakan!'], mantap: ['👍', 'Mantap!'], gas: ['🔥', 'Gaskeun!'],
+  selesai: ['✅', 'Beres!'], hore: ['🎉', 'Horeee!'], makasih: ['🙏', 'Makasih ya!'], bingung: ['🤔', 'Hmm… bingung'],
+  pusing: ['😵‍💫', 'Pusing pala'], capek: ['😮‍💨', 'Capek bgt'], kesal: ['😤', 'Kesel!'], marah: ['😡', 'Grrr!'],
+  sedih: ['😢', 'Sedih…'], ngakak: ['🤣', 'Wkwkwk'], kopi: ['☕', 'Ngopi dulu'], deadline: ['⏰', 'Deadline!!'],
+  cinta: ['😍', 'Suka banget'], tolong: ['🆘', 'Tolongin dong'], kamera: ['📸', 'Cekrek!'], tidur: ['😴', 'Ngantuk…'],
+};
+export const MOODS = { senang: '😄', bahagia: '🥳', biasa: '🙂', fokus: '🧐', bingung: '🤔', capek: '😮‍💨', kesal: '😤', marah: '😡', sedih: '😢', panik: '😱' };
 export function postMessage(m) {
   const room = String(m.room || '');
   if (!ROOM.test(room)) throw new Error('Ruang chat tidak dikenal');
+  const sticker = STICKERS[m.sticker] ? m.sticker : '';
   const text = str(m.text, 8000);
-  if (!text) throw new Error('Pesan kosong');
-  const msg = { at: nowIso(), room, from: line(m.from, 60) || 'Anonim', role: line(m.role, 60), text, task: TID.test(String(m.task || '')) ? m.task : (/TASK-\d{3,6}/.exec(text)?.[0] || ''), kind: line(m.kind, 20) || 'chat' };
+  if (!text && !sticker) throw new Error('Pesan kosong');
+  const reply = /^[a-z0-9-]{6,40}$/.test(String(m.reply_to || '')) ? readRoom(room, 2000).find((x) => x.id === m.reply_to) : null;
+  const msg = {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    at: nowIso(), room, from: line(m.from, 60) || 'Anonim', role: line(m.role, 60), text, sticker,
+    mood: MOODS[m.mood] ? m.mood : '',
+    reply_to: reply ? { id: reply.id, from: reply.from, text: (reply.text || (reply.sticker ? STICKERS[reply.sticker]?.join(' ') : '')).slice(0, 160) } : null,
+    task: TID.test(String(m.task || '')) ? m.task : (/TASK-\d{3,6}/.exec(text)?.[0] || ''),
+    kind: line(m.kind, 20) || 'chat',
+  };
   fs.mkdirSync(chatDir(), { recursive: true });
-  fs.appendFileSync(roomFile(room), `${JSON.stringify(msg)}\n`, 'utf8');
+  fs.appendFileSync(roomFile(room), `${JSON.stringify(msg)}
+`, 'utf8');
   return msg;
 }
 export function readRoom(room, limit = 300) {

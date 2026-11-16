@@ -21,7 +21,8 @@
 //   node hrd.mjs task-submit <ID> --by Nama            serahkan ke Subdivision Review (semua subtask DONE)
 //   node hrd.mjs task-review <ID> --stage sub|div|ceo --result lolos|revisi --by Nama [--note "…"] [--cause "…"] [--subtasks 1,2]
 //   node hrd.mjs task-resolve <ID> --by Nama           revisi selesai → kembali ke Subdivision Review
-//   node hrd.mjs chat --room ROOM --by Nama [--role "Head of …"] --text "…"    room: company|ceo|div:<id>|sub:<div>:<sub>|task:TASK-001
+//   node hrd.mjs chat --room ROOM --by Nama [--text "…"] [--sticker kopi] [--mood senang] [--reply <id>] [--role "…"]
+//                                                      room: company|ceo|div:<id>|sub:<div>:<sub>|task:TASK-001 · daftar stiker: node hrd.mjs stickers
 //   node hrd.mjs chat-read --room ROOM [--limit 30]
 // Tipe: harian-pagi | harian-sore | mingguan | bulanan | lainnya
 import fs from 'node:fs';
@@ -198,9 +199,22 @@ switch (cmd) {
     break;
   }
   case 'task-resolve': OPS.resolveRevision(rest[0], by(), opt('note')); done(`${rest[0]} → INTERNAL REVIEW`); break;
-  case 'chat': OPS.postMessage({ room: opt('room'), from: by(), role: opt('role'), text: opt('text'), task: opt('task') }); done('Pesan terkirim'); break;
-  case 'chat-read': for (const m of OPS.readRoom(opt('room'), Number(opt('limit') || 30))) console.log(`[${m.at.slice(0, 16)}] ${m.from}${m.role ? ` (${m.role})` : ''}: ${m.text}`); break;
+  case 'chat': {
+    if (opt('sticker') && !OPS.STICKERS[opt('sticker')]) fail(`Stiker: ${Object.keys(OPS.STICKERS).join(', ')}`);
+    if (opt('mood') && !OPS.MOODS[opt('mood')]) fail(`Mood: ${Object.keys(OPS.MOODS).join(', ')}`);
+    const m = OPS.postMessage({ room: opt('room'), from: by(), role: opt('role'), text: opt('text'), task: opt('task'), sticker: opt('sticker'), mood: opt('mood'), reply_to: opt('reply') });
+    done(`Pesan terkirim (id ${m.id})`);
+    break;
+  }
+  case 'chat-read':
+    for (const m of OPS.readRoom(opt('room'), Number(opt('limit') || 30))) {
+      const st = m.sticker ? ` [stiker ${m.sticker}]` : '';
+      const rp = m.reply_to ? ` (membalas ${m.reply_to.from}: "${m.reply_to.text.slice(0, 50)}")` : '';
+      console.log(`[${m.at.slice(0, 16)}] id=${m.id || '-'} ${m.from}${m.mood ? ` ${OPS.MOODS[m.mood]}` : ''}${rp}: ${m.text}${st}`);
+    }
+    break;
+  case 'stickers': console.log(`Stiker: ${Object.entries(OPS.STICKERS).map(([k, [e, c]]) => `${k} ${e} "${c}"`).join(' · ')}\nMood: ${Object.entries(OPS.MOODS).map(([k, e]) => `${k} ${e}`).join(' · ')}`); break;
   default:
-    console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 26).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+    console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 28).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
 }
 } catch (e) { fail(`Gagal: ${e.message}`); }
