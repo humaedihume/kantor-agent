@@ -61,7 +61,15 @@ function writeJson(file, v) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(v, null, 2)}\n`, 'utf8');
-  fs.renameSync(tmp, file);
+  // Windows: rename bisa gagal sesaat (EPERM/EBUSY) bila file sedang dibaca server — coba ulang, lalu tulis langsung
+  for (let i = 0; i < 8; i += 1) {
+    try { fs.renameSync(tmp, file); return; } catch (e) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  fs.writeFileSync(file, fs.readFileSync(tmp));
+  fs.rmSync(tmp, { force: true });
 }
 const readJson = (file, fb) => {
   try {
