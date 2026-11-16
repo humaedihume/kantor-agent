@@ -337,6 +337,7 @@ export function postMessage(m) {
     reply_to: reply ? { id: reply.id, from: reply.from, text: (reply.text || (reply.sticker ? STICKERS[reply.sticker]?.join(' ') : '')).slice(0, 160) } : null,
     task: TID.test(String(m.task || '')) ? m.task : (/TASK-\d{3,6}/.exec(text)?.[0] || ''),
     kind: line(m.kind, 20) || 'chat',
+    ...(m.auto ? { auto: line(m.auto, 20) } : {}),
   };
   fs.mkdirSync(chatDir(), { recursive: true });
   fs.appendFileSync(roomFile(room), `${JSON.stringify(msg)}

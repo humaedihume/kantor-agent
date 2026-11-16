@@ -33,6 +33,8 @@ const AG = await import(new URL('../lib/node/agents.mjs', import.meta.url));
 const ORG = await import(new URL('../lib/node/org.mjs', import.meta.url));
 const BRAND = await import(new URL('../lib/node/brand.mjs', import.meta.url));
 const OPS = await import(new URL('../lib/node/ops.mjs', import.meta.url));
+// obrolan ringan otomatis di grup chat (matikan dengan KANTOR_CHATTER=0)
+const CHATTER = process.env.KANTOR_CHATTER === '0' ? null : (await import(new URL('../lib/node/chatter.mjs', import.meta.url))).startChatter({ OPS, ORG, opsDir: OPS.opsDir });
 const { pageConfig, hostAllowed, SECURITY_HEADERS } = await import(new URL('../lib/node/http.mjs', import.meta.url));
 
 if (STORAGE) {
@@ -219,7 +221,11 @@ async function opsApi(req, res, p) {
       if (t) { const x = OPS.getTask(t[1]); return x ? json(res, 200, x) : json(res, 404, { error: 'Tidak ditemukan' }); }
     }
     if (p === '/kerja/api/ops/tasks' && req.method === 'POST') return json(res, 201, OPS.createTask(b, by));
-    if (p === '/kerja/api/ops/chat' && req.method === 'POST') return json(res, 201, OPS.postMessage({ ...b, from: by, role: b.role || 'CEO' }));
+    if (p === '/kerja/api/ops/chat' && req.method === 'POST') {
+      const msg = OPS.postMessage({ ...b, from: by, role: b.role || 'CEO', auto: undefined });
+      CHATTER?.onCeoMessage(msg).catch(() => {});
+      return json(res, 201, msg);
+    }
     if (p === '/kerja/api/ops/agents' && req.method === 'PUT') return json(res, 200, OPS.setAgentStatus(b.name, b.active, by, b.reason));
     const m = /^\/kerja\/api\/ops\/tasks\/(TASK-\d+)(?:\/(subtasks|submit|review|resolve))?$/.exec(p);
     if (m && write) {
