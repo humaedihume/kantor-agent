@@ -33,7 +33,12 @@ export function buildState({ projectDir, storageDir, cfg, now }) {
   }
 
   // run subagent + segmen efektif
-  const runs = [...scan.runs].sort((a, b) => cmp(tsMs(a.started), tsMs(b.started)) || strcmp(a.id, b.id));
+  // lantai kantor: hanya subagent milik lantai ini; subagent kepala divisi = Ketua lantai (bukan anggota tim)
+  const FR = cfg.floorRules ?? null;
+  const lowT = (r) => String(r.agentType).toLowerCase();
+  const allRuns = [...scan.runs].sort((a, b) => cmp(tsMs(a.started), tsMs(b.started)) || strcmp(a.id, b.id)).filter((r) => !FR || FR.accept(r.agentType));
+  const leaderRuns = FR?.leaderAgent ? allRuns.filter((r) => lowT(r) === FR.leaderAgent) : [];
+  const runs = allRuns.filter((r) => !leaderRuns.includes(r));
   const byId = new Map();
   for (const r of runs) {
     const segs = r.segs.map(([a, b]) => ({ start: tsMs(a), startIso: a, end: b === null ? null : tsMs(b), endIso: b }));
@@ -81,7 +86,11 @@ export function buildState({ projectDir, storageDir, cfg, now }) {
       if ((slot.job !== null && slot.job.run === job.run) || free(slot, job.start)) pick = prev;
     }
     if (pick === null) {
-      const i = pool.findIndex((s) => free(s, job.start));
+      // utamakan anggota tim yang ditugaskan untuk tipe agent ini
+      const type = String(job.run.agentType).toLowerCase();
+      let i = pool.findIndex((s, k) => cfg.agents?.[k] && cfg.agents[k].toLowerCase() === type && free(s, job.start));
+      if (i < 0) i = pool.findIndex((s, k) => !cfg.agents?.[k] && free(s, job.start));
+      if (i < 0) i = pool.findIndex((s) => free(s, job.start));
       if (i >= 0) pick = { kind: 'pool', idx: i, name: cfg.team[i] };
     }
     if (pick === null) {
@@ -91,7 +100,9 @@ export function buildState({ projectDir, storageDir, cfg, now }) {
         fl.push({ job: null, name: null });
       }
       let name;
+      const own = FR?.flName ? FR.flName(job.run.agentType) : null;
       if (prev !== null && prev.kind === 'fl') name = prev.name;
+      else if (own !== null && !fl.some((sl) => !free(sl, job.start) && sl.name === own)) name = own;
       else {
         const used = new Set(fl.filter((s) => !free(s, job.start)).map((s) => s.name));
         const L = cfg.freelancers.length;
@@ -120,7 +131,7 @@ export function buildState({ projectDir, storageDir, cfg, now }) {
   const ketuaColor = cfg.colors.ketua;
   const flPal = cfg.colors.freelancers;
   const charInfo = (who, run) => (who.kind === 'pool'
-    ? { key: `tim-${who.idx}`, name: cfg.team[who.idx], label: cfg.team[who.idx], color: cfg.colors.team[who.idx % cfg.colors.team.length] }
+    ? { key: `tim-${who.idx}`, name: cfg.team[who.idx], label: cfg.agents?.[who.idx] ? `${cfg.team[who.idx]} · ${cfg.agents[who.idx]}` : cfg.team[who.idx], color: cfg.colors.team[who.idx % cfg.colors.team.length] }
     : { key: `fl-${run.id}`, name: who.name, label: `Freelancer · ${who.name}`, color: flPal[hash(who.name) % flPal.length] });
   const jobState = (job) => (job.end === null ? 'bekerja' : now - job.end < CD ? 'selesai' : 'santai');
   const task = (r) => (r.description !== '' ? r.description : r.agentType);
@@ -191,11 +202,23 @@ export function buildState({ projectDir, storageDir, cfg, now }) {
     todos: dm && dm.todos !== null ? { items: dm.todos, at: dm.todosAt, source: dm.todoSource } : null,
   };
 
+  // lantai divisi: Ketua = kepala divisi, statusnya dari subagent kepala divisi (bukan sesi utama Claude)
+  if (FR?.leaderAgent !== undefined) {
+    const lr = [...leaderRuns].sort((a, b) => cmp(tsMs(b.updated), tsMs(a.updated)))[0] ?? null;
+    const busy = leaderRuns.some((r) => r.segs.some(([, e]) => e === null) && now - tsMs(r.updated) <= RW);
+    const st = busy ? 'bekerja' : lr && now - tsMs(lr.updated) < CD ? 'selesai' : 'santai';
+    Object.assign(ketua, {
+      state: st, activity: busy ? 'aktif' : null, session: null, updated: lr ? lr.updated : null,
+      last: lr ? [...lr.events].reverse().filter((e) => e.kind !== 'text').slice(0, 8) : [],
+      tools: lr ? lr.tools : 0, tokens: lr ? lr.tokens : 0, waiting_on: 0, other_sessions: 0, sessions: 0, todos: null,
+    });
+  }
+  ketua.role = cfg.ketua_role || 'Ketua';
   // ---- feed
   const K = { key: 'ketua', name: cfg.ketua, label: cfg.ketua, color: ketuaColor };
   const feed = [];
   const add = (t, ms, who, kind, text, tool) => feed.push({ ms, e: { t, who: who.key, name: who.label, color: who.color, kind, text, tool } });
-  for (const m of mains) {
+  for (const m of FR?.leaderAgent !== undefined ? [] : mains) {
     for (const e of m.events) {
       if (e.kind === 'text' || e.tool === 'Agent' || e.tool === 'Task') continue;
       add(e.t, tsMs(e.t), K, e.kind, e.text, e.tool);

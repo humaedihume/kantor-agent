@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operasional · Kantor Agent</title>
+<style>
+:root { --bg:#f4f1ea; --card:#fffdf8; --ink:#25221d; --muted:#6f6a62; --line:#e2dccf; --acc:#6a55c9; --danger:#c0392b; --ok:#2f9a6d; --warn:#b7791f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17161a; --card:#211f25; --ink:#ece8f2; --muted:#9b96a3; --line:#34313a; --acc:#9a88ff; --danger:#ff7a6b; --ok:#5fd3a1; --warn:#f0b44c; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:5; }
+header h1 { font-size:17px; margin:0; flex:1; }
+nav.links { display:flex; gap:12px; }
+a { color:var(--acc); }
+.tabs { display:flex; gap:4px; overflow-x:auto; padding:8px 16px 0; border-bottom:1px solid var(--line); background:var(--card); }
+.tabs button { border:0; background:none; color:var(--muted); font:inherit; padding:8px 12px; border-bottom:2px solid transparent; cursor:pointer; white-space:nowrap; }
+.tabs button[aria-selected="true"] { color:var(--ink); border-color:var(--acc); font-weight:600; }
+main { max-width:1300px; margin:0 auto; padding:16px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; min-width:0; margin-bottom:14px; }
+.card h2 { font-size:15px; margin:0 0 10px; }
+.grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); }
+.kpis { display:grid; gap:10px; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); margin-bottom:14px; }
+.kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.kpi small { color:var(--muted); display:block; } .kpi b { font-size:22px; font-variant-numeric:tabular-nums; }
+table { border-collapse:collapse; width:100%; }
+.tw { overflow-x:auto; }
+th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:500; font-size:12.5px; }
+td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+.muted { color:var(--muted); } .small { font-size:12.5px; }
+.pill { font-size:11.5px; padding:1px 8px; border-radius:99px; border:1px solid currentColor; white-space:nowrap; display:inline-block; }
+.p-P0 { color:var(--danger); } .p-P1 { color:var(--warn); } .p-P2 { color:var(--acc); } .p-P3 { color:var(--muted); }
+.s-BLOCKED, .s-CANCELLED { color:var(--danger); } .s-APPROVED, .s-COMPLETED, .s-DONE { color:var(--ok); } .s-REVISION, .s-CLARIFICATION { color:var(--warn); }
+.bar { height:6px; background:var(--line); border-radius:99px; overflow:hidden; min-width:60px; } .bar i { display:block; height:100%; background:var(--acc); }
+.btn { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:6px 11px; cursor:pointer; font:inherit; }
+.btn.pri { background:var(--acc); border-color:var(--acc); color:#fff; } .btn.ok { background:var(--ok); border-color:var(--ok); color:#fff; } .btn.no { color:var(--danger); }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:6px 8px; max-width:100%; }
+textarea { width:100%; }
+label { display:block; font-size:12.5px; color:var(--muted); margin-top:8px; }
+label > input:not([type=checkbox]), label > select, label > textarea { display:block; width:100%; margin-top:3px; color:var(--ink); }
+.chk { display:flex; gap:8px; align-items:center; color:var(--ink); font-size:13.5px; }
+.form2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0 12px; }
+.kanban { display:flex; gap:10px; overflow-x:auto; padding-bottom:8px; }
+.col { flex:0 0 230px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; }
+.col h3 { font-size:12.5px; margin:2px 4px 8px; display:flex; justify-content:space-between; }
+.tcard { display:block; width:100%; text-align:left; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:6px; cursor:pointer; font:inherit; }
+.tcard.over { border-color:var(--danger); }
+.tcard b { display:block; font-size:13px; }
+.org-div { border-left:4px solid var(--acc); }
+.person { display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); border-radius:8px; padding:4px 8px; margin:3px; background:var(--bg); }
+.person.off { opacity:.5; text-decoration:line-through; }
+.person small { color:var(--muted); }
+.chat { display:grid; grid-template-columns:minmax(220px, 300px) 1fr; gap:14px; }
+@media (max-width: 760px) { .chat { grid-template-columns:1fr; } }
+.rooms button { display:block; width:100%; text-align:left; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:7px 9px; margin-bottom:5px; cursor:pointer; font:inherit; }
+.rooms button[aria-current="true"] { border-color:var(--acc); box-shadow:0 0 0 2px color-mix(in srgb, var(--acc) 30%, transparent); }
+.rooms small { color:var(--muted); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.msgs { max-height:60vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
+.msg { border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--bg); white-space:pre-wrap; overflow-wrap:anywhere; }
+.msg.system, .msg.review, .msg.delegation, .msg.progress { border-style:dashed; }
+.msg header { all:unset; display:flex; gap:8px; font-size:12px; color:var(--muted); margin-bottom:3px; flex-wrap:wrap; }
+.msg header b { color:var(--ink); }
+dialog { border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); width:min(980px, 96vw); max-height:92vh; padding:0; }
+dialog::backdrop { background:rgb(0 0 0 / .4); }
+.dlg-h { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--card); }
+.dlg-h h2 { margin:0; font-size:16px; flex:1; }
+.dlg-b { padding:14px 16px; }
+.sec { border-top:1px solid var(--line); padding-top:10px; margin-top:12px; }
+.sec h3 { font-size:14px; margin:0 0 6px; }
+.pre { white-space:pre-wrap; overflow-wrap:anywhere; }
+.toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
+.toast.show { opacity:1; }
+.flow { display:flex; flex-wrap:wrap; gap:4px; align-items:center; font-size:12px; color:var(--muted); }
+.flow span { border:1px solid var(--line); border-radius:6px; padding:2px 6px; }
+.flow span.on { border-color:var(--acc); color:var(--ink); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Operasional Kelana</h1>
+  <nav class="links"><a href="/kerja">Kantor 3D</a><a href="/kerja/report">Report HRD</a><a href="/kerja/brand">Brand Kit</a><a href="/kerja/agen">Kelola</a></nav>
+</header>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main id="view"></main>
+<dialog id="dlg"><div class="dlg-h"><h2 id="dlgTitle"></h2><button class="btn" id="dlgClose">Tutup</button></div><div class="dlg-b" id="dlgBody"></div></dialog>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const toast = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
+async function api(url, method = 'GET', body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json', 'X-Kantor': '1' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Gagal (${r.status})`);
+  return j;
+}
+const TABS = { command: 'CEO Command Center', org: 'Organization Chart', chat: 'Internal Communication', tasks: 'Task Management', qc: 'Approval & QC', analytics: 'Performance Analytics' };
+let META = null, ORGC = null, tab = 'command', room = 'ceo';
+const pill = (s, cls) => `<span class="pill ${cls}">${esc(s)}</span>`;
+const st = (s) => pill(s, `s-${String(s).replace(/ /g, '-')}`);
+const bar = (v) => `<div class="bar" title="${v}%"><i style="width:${v}%"></i></div>`;
+const pctTxt = (v) => (v == null ? '–' : `${v}%`);
+const fmt = (iso) => (iso ? new Date(iso).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }) : '');
+
+function renderTabs() {
+  $('#tabs').innerHTML = Object.entries(TABS).map(([k, v]) => `<button role="tab" aria-selected="${k === tab}" data-tab="${k}">${v}</button>`).join('');
+}
+$('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
+function go(t) { tab = t; try { localStorage.setItem('ops-tab', t); } catch {} renderTabs(); render(); }
+
+function people() {
+  const out = [];
+  for (const d of ORGC.divisions) {
+    if (d.head) out.push({ ...d.head, div: d.name });
+    d.members.forEach((m) => out.push({ ...m, div: d.name }));
+    for (const s of d.subdivisions) {
+      if (s.head) out.push({ ...s.head, div: d.name, sub: s.name });
+      [...s.members, ...s.freelancers].forEach((m) => out.push({ ...m, div: d.name, sub: s.name }));
+    }
+  }
+  return out;
+}
+
+async function render() {
+  const v = $('#view');
+  try {
+    if (tab === 'command') return renderCommand(v, await api('/kerja/api/ops/overview'));
+    if (tab === 'org') { ORGC = await api('/kerja/api/ops/org'); return renderOrg(v); }
+    if (tab === 'chat') return renderChat(v);
+    if (tab === 'tasks') return renderTasks(v, (await api('/kerja/api/ops/tasks')).tasks);
+    if (tab === 'qc') return renderQC(v, (await api('/kerja/api/ops/tasks')).tasks);
+    if (tab === 'analytics') return renderAnalytics(v, await api('/kerja/api/ops/analytics'));
+  } catch (e) { v.innerHTML = `<div class="card">Gagal memuat: ${esc(e.message)}</div>`; }
+}
+
+// ---------- 1. CEO Command Center
+function taskRow(t) {
+  return `<tr><td><a href="#" data-open="${t.id}">${t.id}</a></td><td>${esc(t.title)}</td><td>${esc(t.pic || '-')}</td><td>${pill(t.priority, `p-${t.priority}`)}</td><td class="n">${t.progress}%${bar(t.progress)}</td><td>${st(t.status)}${t.overdue ? ' <span class="pill s-BLOCKED">terlambat</span>' : ''}</td></tr>`;
+}
+function renderCommand(v, o) {
+  const c = o.company;
+  v.innerHTML = `
+  <div class="kpis">${[['Divisi', c.divisions], ['Sub divisi', c.subdivisions], ['Agent aktif', `${c.active_agents}/${c.agents}`], ['Total task', c.tasks], ['Selesai', c.completed], ['Dalam proses', c.in_progress], ['Terhambat', c.blocked], ['Terlambat', c.overdue]].map(([k, x]) => `<div class="kpi"><small>${k}</small><b>${x}</b></div>`).join('')}</div>
+  <div class="grid">
+    <section class="card"><h2>Beri instruksi ke kepala divisi / sub divisi</h2>${newTaskForm()}</section>
+    <section class="card"><h2>Pending approval (${o.pending.length})</h2>${o.pending.length ? `<div class="tw"><table><tr><th>Task</th><th>Nama</th><th>Status</th></tr>${o.pending.map((t) => `<tr><td><a href="#" data-open="${t.id}">${t.id}</a></td><td>${esc(t.title)}</td><td>${st(t.status)}</td></tr>`).join('')}</table></div>` : '<p class="muted">Tidak ada yang menunggu keputusan Anda.</p>'}
+      <h2 style="margin-top:16px">Critical issues (${o.critical.length})</h2>${o.critical.length ? `<ul>${o.critical.map((x) => `<li><a href="#" data-open="${x.task}">${x.task}</a> ${esc(x.issue)}</li>`).join('')}</ul>` : '<p class="muted">Tidak ada masalah kritis.</p>'}</section>
+  </div>
+  <section class="card"><h2>Division performance</h2><div class="tw"><table><tr><th>Divisi</th><th class="n">Total</th><th class="n">Selesai</th><th class="n">Proses</th><th class="n">Blocked</th><th class="n">Rata-rata progres</th></tr>${o.divisions.map((d) => `<tr><td>${esc(d.name)}</td><td class="n">${d.total}</td><td class="n">${d.completed}</td><td class="n">${d.in_progress}</td><td class="n">${d.blocked}</td><td class="n">${pctTxt(d.performance)}</td></tr>`).join('')}</table></div></section>
+  <section class="card"><h2>Active task monitoring</h2>${o.active.length ? `<div class="tw"><table><tr><th>ID</th><th>Nama</th><th>PIC</th><th>Prioritas</th><th class="n">Progres</th><th>Status</th></tr>${o.active.map(taskRow).join('')}</table></div>` : '<p class="muted">Belum ada task aktif. Beri instruksi di atas.</p>'}</section>
+  <section class="card"><h2>Recent activities</h2>${o.recent.length ? o.recent.map(msgHtml).join('') : '<p class="muted">Belum ada aktivitas.</p>'}</section>`;
+  bindNewTask(v);
+}
+function newTaskForm() {
+  const opts = (ORGC?.divisions || []).map((d) => `<option>${esc(d.name)}</option>`).join('');
+  return `<form id="newTask"><label>Nama pekerjaan<input name="title" required maxlength="140" placeholder="mis. Strategi konten Instagram Desember"></label>
+  <div class="form2"><label>Divisi<select name="division">${opts}</select></label><label>Sub divisi<select name="subdivision"></select></label>
+  <label>Prioritas<select name="priority">${Object.entries(META.priorities).map(([k, x]) => `<option value="${k}" ${k === 'P2' ? 'selected' : ''}>${k} · ${x}</option>`).join('')}</select></label><label>Deadline<input type="date" name="deadline"></label></div>
+  <label>Instruksi / deskripsi<textarea name="description" rows="3" placeholder="Apa yang Anda butuhkan"></textarea></label>
+  <div class="form2"><label>Tujuan<textarea name="objective" rows="2"></textarea></label><label>Output yang diharapkan<textarea name="deliverables" rows="2"></textarea></label></div>
+  <div class="row" style="margin-top:10px"><button class="btn pri">Kirim instruksi</button><span class="muted small">PIC otomatis = kepala sub divisi. Status awal INBOX → kepala sub divisi melakukan klarifikasi.</span></div></form>`;
+}
+function bindNewTask(v) {
+  const f = $('#newTask', v);
+  if (!f) return;
+  const fillSub = () => { const d = ORGC.divisions.find((x) => x.name === f.division.value); f.subdivision.innerHTML = `<option value="">(langsung kepala divisi)</option>${(d?.subdivisions || []).map((s) => `<option>${esc(s.name)}</option>`).join('')}`; if (d?.subdivisions?.length) f.subdivision.value = d.subdivisions[0].name; };
+  f.division.addEventListener('change', fillSub); fillSub();
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = ORGC.divisions.find((x) => x.name === f.division.value);
+    const s = d?.subdivisions.find((x) => x.name === f.subdivision.value);
+    const body = Object.fromEntries(new FormData(f)); body.pic = (s?.head || d?.head)?.name || '';
+    try { const t = await api('/kerja/api/ops/tasks', 'POST', body); toast(`${t.id} dibuat dan dikirim ke ${body.pic || 'divisi'}`); render(); } catch (err) { toast(err.message); }
+  });
+}
+
+// ---------- 2. Organization Chart
+function personHtml(p) {
+  return `<span class="person ${p.active ? '' : 'off'}" title="${esc(p.agent || '')}"><b>${esc(p.name)}</b><small>${esc(p.role)}${p.agent ? ` · ${esc(p.agent)}` : ''} · ${p.load.open} aktif / ${p.load.done} selesai</small><button class="btn small" data-toggle="${esc(p.name)}" data-active="${p.active ? 1 : 0}">${p.active ? 'Nonaktifkan' : 'Aktifkan'}</button></span>`;
+}
+function renderOrg(v) {
+  const o = ORGC;
+  v.innerHTML = `<section class="card"><h2>${esc(o.company)}</h2><p>CEO: <b>${esc(o.ceo)}</b>${o.hrd ? ` · HRD: ${personHtml(o.hrd)}` : ''}</p>
+  <p class="muted small">Tambah divisi, sub divisi, atau agent baru di <a href="/kerja/agen">Kelola</a>. Agent nonaktif tidak boleh menerima delegasi baru.</p></section>
+  ${o.divisions.map((d) => `<section class="card org-div" style="border-left-color:${esc(d.color)}"><h2>Divisi ${esc(d.name)}</h2>${d.goal ? `<p class="muted">${esc(d.goal)}</p>` : ''}
+    <p>Head of Division: ${d.head ? personHtml(d.head) : '<i>kosong</i>'}</p>${d.members.map(personHtml).join('')}
+    ${d.subdivisions.map((s) => `<div class="sec"><h3>Sub divisi ${esc(s.name)}</h3>${s.goal ? `<p class="muted small">${esc(s.goal)}</p>` : ''}<p>Head of Subdivision: ${s.head ? personHtml(s.head) : '<i>kosong</i>'}</p><div>${[...s.members, ...s.freelancers].map(personHtml).join('')}</div></div>`).join('')}
+  </section>`).join('')}`;
+  v.onclick = async (e) => {
+    const b = e.target.closest('[data-toggle]'); if (!b) return;
+    const off = b.dataset.active === '1';
+    const reason = off ? prompt(`Alasan menonaktifkan ${b.dataset.toggle}?`) : '';
+    if (off && reason === null) return;
+    try { await api('/kerja/api/ops/agents', 'PUT', { name: b.dataset.toggle, active: !off, reason }); toast('Status agent disimpan'); render(); } catch (err) { toast(err.message); }
+  };
+}
+
+// ---------- 3. Internal Communication
+function msgHtml(m) {
+  return `<div class="msg ${esc(m.kind)}"><header><b>${esc(m.from)}</b>${m.role ? `<span>${esc(m.role)}</span>` : ''}<span>${fmt(m.at)}</span><span>${esc(m.room)}</span>${m.task ? `<a href="#" data-open="${m.task}">${m.task}</a>` : ''}</header>${esc(m.text)}</div>`;
+}
+async function renderChat(v) {
+  const { rooms } = await api('/kerja/api/ops/rooms');
+  const groups = { company: 'Company', division: 'Division', subdivision: 'Subdivision', task: 'Task' };
+  v.innerHTML = `<div class="chat"><aside class="card rooms">${Object.entries(groups).map(([k, g]) => { const rs = rooms.filter((r) => r.type === k); return rs.length ? `<h2>${g} Chat</h2>${rs.map((r) => `<button data-room="${esc(r.id)}" aria-current="${r.id === room}">${esc(r.name)}<small>${r.last ? `${esc(r.last.from)}: ${esc(r.last.text)}` : 'belum ada pesan'}</small></button>`).join('')}` : ''; }).join('')}</aside>
+  <section class="card"><h2 id="roomName"></h2><div class="msgs" id="msgs"></div>
+  <form id="send" class="sec"><textarea name="text" rows="2" placeholder="Tulis pesan sebagai CEO (sebut TASK-001 untuk menautkan task)" required></textarea><div class="row" style="margin-top:6px"><button class="btn pri">Kirim</button><span class="muted small">Pesan tidak dapat dihapus (sesuai aturan 6.3).</span></div></form></section></div>`;
+  const load = async () => {
+    const r = rooms.find((x) => x.id === room) || rooms[0]; room = r.id;
+    $('#roomName').textContent = r.name;
+    const { messages } = await api(`/kerja/api/ops/chat?room=${encodeURIComponent(room)}`);
+    $('#msgs').innerHTML = messages.length ? messages.map(msgHtml).join('') : '<p class="muted">Belum ada pesan di ruang ini.</p>';
+    $('#msgs').scrollTop = 1e9;
+    v.querySelectorAll('[data-room]').forEach((b) => b.setAttribute('aria-current', b.dataset.room === room));
+  };
+  v.querySelector('.rooms').onclick = (e) => { const b = e.target.closest('[data-room]'); if (b) { room = b.dataset.room; load(); } };
+  $('#send').onsubmit = async (e) => { e.preventDefault(); try { await api('/kerja/api/ops/chat', 'POST', { room, text: e.target.text.value }); e.target.reset(); load(); } catch (err) { toast(err.message); } };
+  load();
+}
+
+// ---------- 4. Task Management
+function renderTasks(v, tasks) {
+  const cols = Object.keys(META.statuses);
+  v.innerHTML = `<section class="card"><div class="row"><h2 style="flex:1;margin:0">Kanban (${tasks.length} task)</h2><input id="q" placeholder="Cari task / PIC"><button class="btn pri" id="newBtn">+ Task baru</button></div></section>
+  <div class="kanban" id="kb"></div>`;
+  const draw = () => {
+    const q = ($('#q').value || '').toLowerCase();
+    const list = tasks.filter((t) => !q || `${t.id} ${t.title} ${t.pic} ${t.subtasks.map((s) => s.agent).join(' ')}`.toLowerCase().includes(q));
+    $('#kb').innerHTML = cols.map((c) => { const ts = list.filter((t) => t.status === c); return `<div class="col"><h3><span>${c}</span><span class="muted">${ts.length}</span></h3>${ts.map((t) => `<button class="tcard ${t.overdue ? 'over' : ''}" data-open="${t.id}"><b>${t.id} · ${esc(t.title)}</b><span class="small muted">${esc(t.pic || '-')} · ${t.deadline || 'tanpa deadline'}</span><div class="row">${pill(t.priority, `p-${t.priority}`)}<span class="small">${t.progress}%</span></div>${bar(t.progress)}</button>`).join('')}</div>`; }).join('');
+  };
+  $('#q').oninput = draw; draw();
+  $('#newBtn').onclick = () => { openDlg('Instruksi baru', newTaskForm()); bindNewTask($('#dlgBody')); };
+}
+
+// ---------- detail task (delegasi, progres, revisi, QC)
+async function openTask(id) {
+  const t = await api(`/kerja/api/ops/tasks/${id}`);
+  const ppl = people();
+  const flow = ['INBOX', 'CLARIFICATION', 'PLANNING', 'ASSIGNED', 'IN PROGRESS', 'INTERNAL REVIEW', 'DIVISION REVIEW', 'CEO REVIEW', 'APPROVED', 'COMPLETED'];
+  const c = t.clarification;
+  const stage = { 'INTERNAL REVIEW': 'sub', 'DIVISION REVIEW': 'div', 'CEO REVIEW': 'ceo' }[t.status];
+  openDlg(`${t.id} · ${t.title}`, `
+  <div class="flow">${flow.map((s) => `<span class="${s === t.status ? 'on' : ''}">${s}</span>`).join('→')}</div>
+  <p>${st(t.status)} ${pill(t.priority, `p-${t.priority}`)} ${t.overdue ? pill('terlambat', 's-BLOCKED') : ''} · Progres <b>${t.progress}%</b> · ${esc(t.division)}${t.subdivision ? ` / ${esc(t.subdivision)}` : ''} · PIC <b>${esc(t.pic || '-')}</b> · Deadline ${t.deadline || '-'} · Requester ${esc(t.requester)}</p>
+  <div class="grid">${[['Deskripsi', t.description], ['Tujuan', t.objective], ['Ruang lingkup', t.scope], ['Deliverables', t.deliverables], ['Acceptance criteria', t.acceptance], ['Hasil akhir', t.result]].filter(([, x]) => x).map(([k, x]) => `<div><b class="small muted">${k}</b><div class="pre">${esc(x)}</div></div>`).join('')}</div>
+  ${c ? `<div class="sec"><h3>Task clarification</h3><div class="grid small">${[['Tujuan dipahami', c.understood], ['Asumsi', c.assumptions], ['Pertanyaan ke CEO', c.questions], ['Rekomendasi', c.recommendation], ['Jawaban CEO', c.answer]].filter(([, x]) => x).map(([k, x]) => `<div><b class="muted">${k}</b><div class="pre">${esc(x)}</div></div>`).join('')}</div>
+    ${t.status === 'CLARIFICATION' ? `<form id="answer"><label>Jawaban CEO<textarea name="answer" rows="3" required></textarea></label><button class="btn pri">Kirim jawaban → READY TO PLAN</button></form>` : ''}</div>` : ''}
+  <div class="sec"><h3>Task breakdown & delegasi</h3><div class="tw"><table><tr><th>#</th><th>Subtask</th><th>PIC</th><th>Deadline</th><th class="n">Bobot</th><th>Progres</th><th>Status</th><th>Output / bukti</th></tr>
+  ${t.subtasks.map((s) => `<tr><td>${s.no}</td><td>${esc(s.title)}${s.instruction ? `<div class="small muted pre">${esc(s.instruction)}</div>` : ''}</td><td>${esc(s.agent)}</td><td>${s.deadline || '-'}</td><td class="n">${s.weight}</td><td>${s.progress}%${bar(s.progress)}</td><td>${st(s.status)}${s.revisions ? ` <span class="small muted">rev ${s.revisions}</span>` : ''}</td><td class="small pre">${esc(s.output || '')}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">Belum didelegasikan.</td></tr>'}</table></div>
+  <details><summary class="small">Tambah subtask (delegasi ke specialist agent)</summary><form id="addSub" class="form2"><label>Subtask<input name="title" required></label><label>PIC<select name="agent">${ppl.filter((p) => p.active).map((p) => `<option value="${esc(p.name)}" data-type="${esc(p.agent || '')}">${esc(p.name)} — ${esc(p.agent || p.role)}</option>`).join('')}</select></label><label>Deadline<input type="date" name="deadline"></label><label>Bobot (%)<input type="number" name="weight" min="0" max="100" value="20"></label><label style="grid-column:1/-1">Instruksi<textarea name="instruction" rows="2"></textarea></label><div><button class="btn pri">Delegasikan</button></div></form></details></div>
+  <div class="sec"><h3>Aksi</h3><div class="row">
+    ${t.subtasks.length && ['ASSIGNED', 'IN PROGRESS'].includes(t.status) ? '<button class="btn" data-act="submit">Serahkan ke Subdivision Review</button>' : ''}
+    ${t.status === 'REVISION' ? '<button class="btn" data-act="resolve">Revisi selesai → periksa ulang</button>' : ''}
+    ${t.status === 'APPROVED' ? '<button class="btn ok" data-act="complete">Tandai COMPLETED</button>' : ''}
+    <select id="stSel">${Object.keys(META.statuses).filter((s) => s === t.status || !['APPROVED', 'DIVISION REVIEW', 'CEO REVIEW', 'INTERNAL REVIEW'].includes(s)).map((s) => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}</select><button class="btn" data-act="status">Ubah status</button>
+    <select id="prSel">${Object.keys(META.priorities).map((p) => `<option ${p === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select><input type="date" id="dlSel" value="${t.deadline}"><button class="btn" data-act="plan">Ubah prioritas/deadline</button>
+  </div></div>
+  ${stage ? `<div class="sec"><h3>${META.stages[stage]}</h3><form id="rev">${META.checklists[stage].map((c) => `<label class="chk"><input type="checkbox" name="checked" value="${esc(c)}">${esc(c)}</label>`).join('')}
+    <label>Catatan / instruksi perbaikan<textarea name="note" rows="2"></textarea></label><div class="form2"><label>Penyebab (untuk revisi)<input name="cause"></label><label>Subtask yang direvisi (no, pisah koma)<input name="subtasks"></label></div>
+    <div class="row" style="margin-top:8px"><button class="btn ok" name="r" value="lolos">Lolos</button><button class="btn" name="r" value="revisi">Minta revisi</button>${stage === 'ceo' ? '<button class="btn no" name="r" value="ditolak">Tolak</button>' : ''}</div>
+    <p class="small muted">Sebagai CEO Anda dapat mengisi tahap mana pun; idealnya kepala sub divisi & kepala divisi (agent) yang mengisi tahap 1–2 lewat <code>hrd.mjs task-review</code>.</p></form></div>` : ''}
+  <div class="sec"><h3>Quality control & approval history</h3>${t.reviews.length ? `<div class="tw"><table><tr><th>Waktu</th><th>Tahap</th><th>Reviewer</th><th>Hasil</th><th>Catatan</th></tr>${t.reviews.map((r) => `<tr><td class="small">${fmt(r.at)}</td><td>${META.stages[r.stage]}</td><td>${esc(r.reviewer)}</td><td>${st(r.result)}</td><td class="small pre">${esc(r.note)}</td></tr>`).join('')}</table></div>` : '<p class="muted small">Belum ada review.</p>'}</div>
+  <div class="sec"><h3>Revision history</h3>${t.revisions.length ? `<div class="tw"><table><tr><th>No</th><th>Tanggal</th><th>Kesalahan</th><th>Penyebab</th><th>Perbaikan</th><th>PIC</th><th>Reviewer</th><th>Status</th></tr>${t.revisions.map((r) => `<tr><td>${r.id}</td><td>${r.date}</td><td class="small pre">${esc(r.problem)}</td><td class="small">${esc(r.cause)}</td><td class="small pre">${esc(r.correction)}</td><td>${esc(r.pic)}</td><td>${esc(r.reviewer)}</td><td>${st(r.status)}</td></tr>`).join('')}</table></div>` : '<p class="muted small">Belum ada revisi.</p>'}</div>
+  <div class="sec"><h3>Riwayat</h3><div class="small">${t.history.slice().reverse().map((h) => `<div>${fmt(h.at)} · <b>${esc(h.by)}</b> · ${esc(h.action)}${h.note ? ` — <span class="muted">${esc(h.note)}</span>` : ''}</div>`).join('')}</div></div>
+  <div class="sec"><a href="#" data-chat="task:${t.id}">Buka Task Room ${t.id} →</a></div>`);
+  const b = $('#dlgBody');
+  const reload = async (msg) => { toast(msg); await openTask(id); render(); };
+  const run = async (fn, msg) => { try { await fn(); reload(msg); } catch (err) { toast(err.message); } };
+  const ans = $('#answer', b);
+  if (ans) ans.onsubmit = (e) => { e.preventDefault(); run(() => api(`/kerja/api/ops/tasks/${id}`, 'PUT', { clarification: { ...c, answer: ans.answer.value }, status: 'READY TO PLAN' }), 'Jawaban klarifikasi dikirim'); };
+  $('#addSub', b).onsubmit = (e) => { e.preventDefault(); const f = e.target; const o = Object.fromEntries(new FormData(f)); o.agent_type = f.agent.selectedOptions[0]?.dataset.type; run(() => api(`/kerja/api/ops/tasks/${id}/subtasks`, 'POST', o), 'Subtask didelegasikan'); };
+  b.querySelectorAll('[data-act]').forEach((x) => x.onclick = () => {
+    const a = x.dataset.act;
+    if (a === 'submit') return run(() => api(`/kerja/api/ops/tasks/${id}/submit`, 'POST', {}), 'Diserahkan untuk review');
+    if (a === 'resolve') return run(() => api(`/kerja/api/ops/tasks/${id}/resolve`, 'POST', {}), 'Kembali ke Subdivision Review');
+    if (a === 'complete') return run(() => api(`/kerja/api/ops/tasks/${id}`, 'PUT', { status: 'COMPLETED' }), 'Task selesai');
+    if (a === 'status') { const s = $('#stSel', b).value; const reason = ['BLOCKED', 'CANCELLED'].includes(s) ? prompt('Alasan / kendala?') : ''; if (reason === null) return; return run(() => api(`/kerja/api/ops/tasks/${id}`, 'PUT', { status: s, reason }), 'Status diubah'); }
+    if (a === 'plan') { const reason = prompt('Alasan perubahan prioritas / deadline?'); if (reason === null) return; return run(() => api(`/kerja/api/ops/tasks/${id}`, 'PUT', { priority: $('#prSel', b).value, deadline: $('#dlSel', b).value, reason }), 'Rencana diubah'); }
+  });
+  const rf = $('#rev', b);
+  if (rf) rf.onsubmit = (e) => { e.preventDefault(); const r = e.submitter.value; const checked = [...rf.querySelectorAll('[name=checked]:checked')].map((i) => i.value); run(() => api(`/kerja/api/ops/tasks/${id}/review`, 'POST', { stage, result: r, note: rf.note.value, cause: rf.cause.value, checked, subtasks: rf.subtasks.value.split(',').map((x) => x.trim()).filter(Boolean) }), `Review: ${r}`); };
+}
+
+// ---------- 5. Approval & QC
+function renderQC(v, tasks) {
+  const q = (s) => tasks.filter((t) => t.status === s);
+  const box = (title, list, hint) => `<section class="card"><h2>${title} (${list.length})</h2><p class="muted small">${hint}</p>${list.length ? `<div class="tw"><table><tr><th>ID</th><th>Nama</th><th>PIC</th><th>Progres</th><th></th></tr>${list.map((t) => `<tr><td>${t.id}</td><td>${esc(t.title)}</td><td>${esc(t.pic)}</td><td>${t.progress}%</td><td><button class="btn" data-open="${t.id}">Periksa</button></td></tr>`).join('')}</table></div>` : '<p class="muted">Kosong.</p>'}</section>`;
+  const hist = tasks.flatMap((t) => t.reviews.map((r) => ({ ...r, id: t.id, title: t.title }))).sort((a, b) => b.at.localeCompare(a.at));
+  v.innerHTML = `<div class="grid">${box('Subdivision Review', q('INTERNAL REVIEW'), 'Diperiksa kepala sub divisi.')}${box('Division Review', q('DIVISION REVIEW'), 'Diperiksa kepala divisi.')}${box('CEO Approval', q('CEO REVIEW'), 'Menunggu keputusan akhir Anda.')}${box('Dalam revisi', q('REVISION'), 'Dikembalikan ke agent.')}</div>
+  <section class="card"><h2>Quality checklist</h2><div class="grid">${Object.entries({ self: 'Self review (agent)', ...META.stages }).map(([k, n]) => `<div><b>${n}</b><ul class="small">${META.checklists[k].map((c) => `<li>${esc(c)}</li>`).join('')}</ul></div>`).join('')}</div></section>
+  <section class="card"><h2>Approval history</h2>${hist.length ? `<div class="tw"><table><tr><th>Waktu</th><th>Task</th><th>Tahap</th><th>Reviewer</th><th>Hasil</th><th>Catatan</th></tr>${hist.map((r) => `<tr><td class="small">${fmt(r.at)}</td><td><a href="#" data-open="${r.id}">${r.id}</a> ${esc(r.title)}</td><td>${META.stages[r.stage]}</td><td>${esc(r.reviewer)}</td><td>${st(r.result)}</td><td class="small pre">${esc(r.note)}</td></tr>`).join('')}</table></div>` : '<p class="muted">Belum ada.</p>'}</section>`;
+}
+
+// ---------- 6. Performance Analytics
+function renderAnalytics(v, a) {
+  const r = a.rate;
+  const tbl = (rows, cols) => rows.length ? `<div class="tw"><table><tr>${cols.map(([h, , n]) => `<th class="${n ? 'n' : ''}">${h}</th>`).join('')}</tr>${rows.map((x) => `<tr>${cols.map(([, f, n]) => `<td class="${n ? 'n' : ''}">${f(x)}</td>`).join('')}</tr>`).join('')}</table></div>` : '<p class="muted">Belum ada data. Analitik terisi otomatis dari task, subtask, dan review.</p>';
+  v.innerHTML = `<div class="kpis">${[['Task completion rate', pctTxt(r.completion)], ['Deadline achievement', pctTxt(r.deadline)], ['Revision rate', pctTxt(r.revision)], ['Lolos tanpa revisi', pctTxt(r.first_pass)], ['Total revisi', r.revisions_total]].map(([k, x]) => `<div class="kpi"><small>${k}</small><b>${x}</b></div>`).join('')}</div>
+  <section class="card"><h2>Kinerja setiap agent</h2><p class="muted small">Skor memakai bobot Bab 16 (${Object.entries(a.weights).map(([k, w]) => `${k} ${w}%`).join(', ')}), dihitung dari data sistem: penyelesaian subtask, ketepatan deadline, dan jumlah revisi.</p>
+  ${tbl(a.agents, [['Agent', (x) => esc(x.agent)], ['Subtask', (x) => x.assigned, 1], ['Selesai', (x) => x.done, 1], ['Completion', (x) => pctTxt(x.completion), 1], ['Tepat waktu', (x) => pctTxt(x.timeliness), 1], ['Revisi', (x) => x.revisions, 1], ['Skor', (x) => x.score, 1], ['Kategori', (x) => esc(x.category)]])}</section>
+  <section class="card"><h2>Produktivitas sub divisi</h2>${tbl(a.subdivisions, [['Sub divisi', (x) => esc(x.name)], ['Task', (x) => x.total, 1], ['Selesai', (x) => x.done, 1], ['Completion', (x) => pctTxt(x.completion), 1], ['Tepat waktu', (x) => pctTxt(x.deadline), 1], ['Rata-rata progres', (x) => `${x.avg_progress}%`, 1], ['Revisi / task', (x) => x.revision_rate, 1]])}</section>
+  <section class="card"><h2>Kinerja kepala divisi</h2>${tbl(a.heads, [['Divisi', (x) => esc(x.name)], ['Kepala', (x) => esc(x.head)], ['Task', (x) => x.total, 1], ['Completion', (x) => pctTxt(x.completion), 1], ['Tepat waktu', (x) => pctTxt(x.deadline), 1], ['Revisi / task', (x) => x.revision_rate, 1]])}</section>`;
+}
+
+// ---------- dialog & tautan global
+function openDlg(title, html) { $('#dlgTitle').textContent = title; $('#dlgBody').innerHTML = html; if (!$('#dlg').open) $('#dlg').showModal(); }
+$('#dlgClose').onclick = () => $('#dlg').close();
+document.addEventListener('click', (e) => {
+  const o = e.target.closest('[data-open]');
+  if (o) { e.preventDefault(); openTask(o.dataset.open).catch((err) => toast(err.message)); return; }
+  const c = e.target.closest('[data-chat]');
+  if (c) { e.preventDefault(); room = c.dataset.chat; $('#dlg').close(); go('chat'); }
+});
+
+(async () => {
+  try { tab = localStorage.getItem('ops-tab') || tab; } catch {}
+  const h = location.hash.slice(1); if (TABS[h]) tab = h;
+  [META, ORGC] = await Promise.all([api('/kerja/api/ops/meta'), api('/kerja/api/ops/org')]);
+  renderTabs(); render();
+  setInterval(() => { if (!$('#dlg').open && !document.activeElement?.closest('form')) render(); }, 15000);
+})();
+</script>
+</body>
+</html>

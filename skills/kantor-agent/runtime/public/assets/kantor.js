@@ -7,11 +7,14 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-const API = '/kerja/api/state';
+const API = '/kerja/api/state' + location.search; // ?lantai=N
 const POLL_MS = 3000;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CFG = window.KANTOR || {};
-const TEAM_NAMES = Array.isArray(CFG.team) && CFG.team.length === 4 ? CFG.team : ['Budi', 'Sari', 'Agus', 'Rina'];
+// lantai divisi bisa punya 0–4 anggota di meja tim (sisanya datang sebagai freelancer)
+const TEAM_NAMES = Array.isArray(CFG.team) && CFG.team.length <= 4 ? CFG.team : ['Budi', 'Sari', 'Agus', 'Rina'];
+const KETUA_ROLE = typeof CFG.ketua_role === 'string' ? CFG.ketua_role : 'Ketua';
+const TEAM_ROLES = Array.isArray(CFG.team_roles) ? CFG.team_roles : [];
 const KETUA_NAME = typeof CFG.ketua === 'string' ? CFG.ketua : 'Joko';
 const COLORS = CFG.colors || { ketua: '#6a55c9', team: ['#3f6fd1', '#2f9a6d', '#d9772f', '#c2417a'], freelancers: ['#0f8fa3'] };
 const NAMES_SIG = [KETUA_NAME, ...TEAM_NAMES].join('|');
@@ -1110,7 +1113,7 @@ const ROW_A_Z = -4.3;
 const ROW_B_Z = -0.7;
 const DESK_DEFS = [
   { id: 'A0', x: -7.0, z: ROW_A_Z, kind: 'ketua', color: COLORS.ketua },
-  ...TEAM_NAMES.map((n, i) => ({ id: `A${i + 1}`, x: -4.2 + i * 2.8, z: ROW_A_Z, kind: 'tim', idx: i, color: COLORS.team[i % COLORS.team.length] })),
+  ...[0, 1, 2, 3].map((i) => ({ id: `A${i + 1}`, x: -4.2 + i * 2.8, z: ROW_A_Z, kind: 'tim', idx: i, color: COLORS.team[i % COLORS.team.length] })),
   ...Array.from({ length: SPARE }, (_, j) => ({ id: `B${j}`, x: -7.0 + j * 2.8, z: ROW_B_Z, kind: 'spare', idx: j, color: '#9a938a', gap: [-8.6, -5.6, -2.8, 2.8][j] })),
 ];
 const desks = {};
@@ -1195,8 +1198,8 @@ function buildDesk(def) {
   seat.add(officeChair(boss ? '#5a3f33' : '#3a3f4a'));
   const d = { ...def, group: desk, seat, main, side, deskMug, lamp, plate: np, data: null, who: null, sig: '', drawnAt: 0, plateSig: '' };
   desks[def.id] = d;
-  if (def.kind === 'ketua') drawPlate(d, KETUA_NAME, 'Ketua', def.color);
-  else if (def.kind === 'tim') drawPlate(d, TEAM_NAMES[def.idx], 'Tim', def.color);
+  if (def.kind === 'ketua') drawPlate(d, KETUA_NAME, KETUA_ROLE, def.color);
+  else if (def.kind === 'tim') drawPlate(d, TEAM_NAMES[def.idx] ?? 'Meja kosong', TEAM_NAMES[def.idx] ? TEAM_ROLES[def.idx] || 'Tim' : '', def.color);
   else drawPlate(d, `Meja cadangan ${def.idx + 1}`, 'Freelancer', def.color);
 }
 DESK_DEFS.forEach(buildDesk);
@@ -1484,8 +1487,8 @@ function workMode(a) {
 }
 
 // Ketua + 4 anggota tim selalu ada
-const KETUA = makeActor({ key: 'ketua', kind: 'ketua', name: KETUA_NAME, role: 'Ketua', color: COLORS.ketua, look: LOOKS.ketua, desk: 'A0' });
-const TEAM = TEAM_NAMES.map((n, i) => makeActor({ key: `tim-${i}`, kind: 'tim', idx: i, name: n, role: 'Tim', color: COLORS.team[i % COLORS.team.length], look: LOOKS.team[i], desk: `A${i + 1}` }));
+const KETUA = makeActor({ key: 'ketua', kind: 'ketua', name: KETUA_NAME, role: KETUA_ROLE, color: COLORS.ketua, look: LOOKS.ketua, desk: 'A0' });
+const TEAM = TEAM_NAMES.map((n, i) => makeActor({ key: `tim-${i}`, kind: 'tim', idx: i, name: n, role: TEAM_ROLES[i] || 'Tim', color: COLORS.team[i % COLORS.team.length], look: LOOKS.team[i], desk: `A${i + 1}` }));
 
 // ---------------------------------------------------------------- lounge: tempat unik per aktor + obrolan
 const LOUNGE = { chatAt: performance.now() + 4000 };
@@ -1639,7 +1642,7 @@ function updateDeskScreens(d, now) {
     sig = JSON.stringify([k?.state, k?.last?.[0]?.t, k?.tools, k?.todos?.at, a.walking, workMode(a)]);
   } else if (a) {
     sig = JSON.stringify([a.key, a.data?.state, a.data?.run?.id, a.data?.run?.last?.[0]?.t, a.data?.run?.tools, workMode(a)]);
-  } else sig = `idle:${d.kind === 'tim' ? JSON.stringify([TEAM[d.idx].data?.state, TEAM[d.idx].data?.run?.id]) : ''}`;
+  } else sig = `idle:${d.kind === 'tim' ? JSON.stringify([TEAM[d.idx]?.data?.state, TEAM[d.idx]?.data?.run?.id]) : ''}`;
   if (sig === d.sig && now - d.drawnAt < 20000) return;
   d.sig = sig;
   d.drawnAt = now;
@@ -1647,9 +1650,9 @@ function updateDeskScreens(d, now) {
     const k = a.data || {};
     if (k.state === 'bekerja' || k.state === 'selesai') {
       const mode = workMode(a);
-      const title = k.activity === 'menunggu-tim' ? `Menunggu ${k.waiting_on} subagent` : 'Sesi utama';
+      const title = k.activity === 'menunggu-tim' ? `Menunggu ${k.waiting_on} subagent` : (CFG.floor > 1 ? 'Tugas divisi' : 'Sesi utama');
       drawWorkScreen(d.main.scr, a, k.last, title, `${a.name} · ${STATE_UI[k.state]?.label || ''} · ${fmtNum.format(k.tools || 0)} aksi · ${fmtCompact.format(k.tokens || 0)} token`, mode);
-    } else drawIdleScreen(d.main.scr, `${a.name} · Santai`, k.updated ? `aktif terakhir ${ago(k.updated)}` : 'belum ada sesi', a.color, false);
+    } else drawIdleScreen(d.main.scr, `${a.name} · Santai`, k.updated ? `aktif terakhir ${ago(k.updated)}` : (CFG.floor > 1 ? 'menunggu tugas' : 'belum ada sesi'), a.color, false);
     drawTodoScreen(d.side.scr, k.todos);
     return;
   }
@@ -1660,7 +1663,10 @@ function updateDeskScreens(d, now) {
     drawTaskCard(d.side.scr, a, r);
     return;
   }
-  if (d.kind === 'tim') {
+  if (d.kind === 'tim' && !TEAM[d.idx]) {
+    drawIdleScreen(d.main.scr, 'Meja kosong', 'tambah anggota di Kelola', '#9a938a', true);
+    drawIdleScreen(d.side.scr, 'Kosong', '', '#9a938a', true);
+  } else if (d.kind === 'tim') {
     const m = TEAM[d.idx];
     drawIdleScreen(d.main.scr, `${m.name} · ${STATE_UI[m.data?.state || 'santai'].label}`, m.data?.run ? `terakhir: ${clip(m.data.run.task, 40)}` : 'menunggu tugas', m.color, false);
     drawIdleScreen(d.side.scr, 'Layar terkunci', '', m.color, true);
@@ -2010,16 +2016,16 @@ function renderUi(d, fresh) {
 
   // kartu
   const k = d.ketua;
-  const kLast = k.updated ? `aktif terakhir ${ago(k.updated)}` : 'belum ada sesi utama';
+  const kLast = k.updated ? `aktif terakhir ${ago(k.updated)}` : (CFG.floor > 1 ? 'menunggu tugas' : 'belum ada sesi utama');
   const kSub = k.other_sessions > 0 ? `+${k.other_sessions} sesi lain aktif`
     : k.activity === 'menunggu-tim' ? `Menunggu ${k.waiting_on} subagent`
       : k.state === 'santai' ? kLast : k.last?.[0]?.text || kLast;
-  const cards = [cardHtml({ key: 'ketua', name: KETUA_NAME, role: 'Ketua', color: COLORS.ketua, state: k.state, task: k.state === 'santai' ? 'Santai di lounge' : k.activity === 'alat' ? 'Menjalankan alat' : 'Sesi utama', act: kSub, working: k.state === 'bekerja' })];
+  const cards = [cardHtml({ key: 'ketua', name: KETUA_NAME, role: KETUA_ROLE, color: COLORS.ketua, state: k.state, task: k.state === 'santai' ? 'Santai di lounge' : k.activity === 'alat' ? 'Menjalankan alat' : (CFG.floor > 1 ? 'Tugas divisi' : 'Sesi utama'), act: kSub, working: k.state === 'bekerja' })];
   for (const m of d.team) {
     const r = m.run;
     const task = m.state === 'santai' ? (r ? `Terakhir: ${r.task}` : 'Santai di lounge') : r?.task || '';
     const act = m.state === 'bekerja' ? r?.last?.[0]?.text || 'Mulai bekerja…' : m.state === 'selesai' ? `Beres ${ago(r?.ended)}` : r ? `selesai ${ago(r.ended)}` : 'menunggu tugas';
-    cards.push(cardHtml({ key: m.key, name: m.name, role: 'Tim', color: m.color, state: m.state, task, act, working: m.state === 'bekerja' }));
+    cards.push(cardHtml({ key: m.key, name: m.name, role: TEAM_ROLES[m.slot] || 'Tim', color: m.color, state: m.state, task, act, working: m.state === 'bekerja' }));
   }
   const seated = d.freelancers.filter((f) => f.desk !== null && f.desk < SPARE);
   const extra = d.freelancers.filter((f) => f.desk === null || f.desk >= SPARE);

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report HRD · Kantor Agent</title>
+<style>
+:root { --bg:#f4f1ea; --card:#fffdf8; --ink:#25221d; --muted:#6f6a62; --line:#e2dccf; --acc:#6a55c9; --danger:#c0392b; --ok:#2f9a6d; --warn:#b7791f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17161a; --card:#211f25; --ink:#ece8f2; --muted:#9b96a3; --line:#34313a; --acc:#9a88ff; --danger:#ff7a6b; --ok:#5fd3a1; --warn:#f0b44c; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:5; }
+header h1 { font-size:17px; margin:0; flex:1; }
+nav { display:flex; gap:12px; }
+a { color:var(--acc); }
+main { max-width:1200px; margin:0 auto; padding:16px; display:grid; grid-template-columns:minmax(260px, 360px) 1fr; gap:16px; }
+@media (max-width: 820px) { main { grid-template-columns:1fr; } }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; min-width:0; }
+.sched { grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; }
+.sched div { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.sched b { display:block; }
+.sched small { color:var(--muted); }
+.filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.filters button, .btn { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:6px 11px; cursor:pointer; font:inherit; }
+.filters button[aria-pressed="true"] { background:var(--acc); border-color:var(--acc); color:#fff; }
+.item { display:block; width:100%; text-align:left; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); margin-bottom:6px; cursor:pointer; font:inherit; }
+.item[aria-current="true"] { border-color:var(--acc); box-shadow:0 0 0 2px color-mix(in srgb, var(--acc) 30%, transparent); }
+.item small { color:var(--muted); display:block; }
+.st { font-size:11.5px; padding:1px 8px; border-radius:99px; border:1px solid currentColor; white-space:nowrap; }
+.st.menunggu { color:var(--warn); } .st.disetujui { color:var(--ok); } .st.revisi { color:var(--acc); } .st.ditolak { color:var(--danger); }
+.doc { overflow-wrap:anywhere; }
+.doc h1 { font-size:20px; } .doc h2 { font-size:17px; margin-top:20px; } .doc h3 { font-size:15px; }
+.doc table { border-collapse:collapse; width:100%; display:block; overflow-x:auto; }
+.doc th, .doc td { border:1px solid var(--line); padding:5px 8px; text-align:left; }
+.doc code { background:var(--bg); padding:1px 4px; border-radius:4px; }
+.decide { border-top:1px solid var(--line); margin-top:16px; padding-top:12px; }
+textarea { width:100%; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px; }
+.btn.ok { background:var(--ok); border-color:var(--ok); color:#fff; } .btn.rev { color:var(--acc); } .btn.no { color:var(--danger); }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.muted { color:var(--muted); }
+.badge { background:var(--danger); color:#fff; border-radius:99px; padding:0 7px; font-size:12px; }
+.toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; }
+.toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Report HRD <span class="badge" id="pendingBadge" hidden></span></h1>
+  <nav><a href="/kerja">Kantor</a><a href="/kerja/ops">Operasional</a><a href="/kerja/brand">Brand Kit</a><a href="/kerja/agen">Kelola</a></nav>
+</header>
+<main>
+  <section class="sched" aria-label="Jadwal meeting">
+    <div><b>Harian 07.00–08.00</b><small>HRD menyusun rencana kerja hari ini. Karyawan mulai bekerja setelah kamu setujui.</small></div>
+    <div><b>Harian 18.00</b><small>HRD melaporkan hasil kerja hari ini: setujui, revisi, atau tolak.</small></div>
+    <div><b>Sabtu 12.00 — Weekly</b><small>Progres, kendala, target/KPI, rencana minggu depan, pengumuman.</small></div>
+    <div><b>Tanggal 1, 09.00 — Monthly</b><small>Evaluasi bulan lalu, target, kendala, strategi, apresiasi, ide.</small></div>
+  </section>
+  <section class="card" aria-label="Daftar report">
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+  </section>
+  <section class="card doc-wrap" aria-live="polite">
+    <div id="detail" class="muted">Pilih report di sebelah kiri.</div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const toast = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2600); };
+const ST = { menunggu: 'Menunggu keputusan', disetujui: 'Disetujui', revisi: 'Perlu revisi', ditolak: 'Ditolak' };
+const FILTERS = { semua: 'Semua', menunggu: 'Menunggu', 'harian-pagi': 'Pagi', 'harian-sore': 'Sore', mingguan: 'Mingguan', bulanan: 'Bulanan' };
+let reports = [];
+let filter = 'semua';
+let current = null;
+
+async function api(url, method = 'GET', body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json', 'X-Kantor': '1' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Gagal (${r.status})`);
+  return j;
+}
+
+// markdown sederhana (judul, daftar, tebal, miring, kode, tabel) — semua teks di-escape dulu
+function md(src) {
+  const inl = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|\W)\*([^*]+)\*(?=\W|$)/g, '$1<i>$2</i>');
+  const out = [];
+  const lines = String(src).replace(/\r/g, '').split('\n');
+  let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    let m;
+    if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')) {
+      close();
+      const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      out.push('<table><thead><tr>' + cells(l).map((c) => `<th>${inl(c)}</th>`).join('') + '</tr></thead><tbody>');
+      i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { out.push('<tr>' + cells(lines[i]).map((c) => `<td>${inl(c)}</td>`).join('') + '</tr>'); i++; }
+      i--; out.push('</tbody></table>');
+    } else if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { close(); out.push(`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`); }
+    else if ((m = /^\s*[-*]\s+(?:\[( |x)\]\s+)?(.*)$/.exec(l))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${m[1] ? (m[1] === 'x' ? '☑ ' : '☐ ') : ''}${inl(m[2])}</li>`); }
+    else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(l))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inl(m[1])}</li>`); }
+    else if (l.trim() === '') close();
+    else { close(); out.push(`<p>${inl(l)}</p>`); }
+  }
+  close();
+  return out.join('\n');
+}
+
+function renderFilters() {
+  $('#filters').innerHTML = Object.entries(FILTERS).map(([k, v]) => `<button data-f="${k}" aria-pressed="${k === filter}">${v}</button>`).join('');
+}
+$('#filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; renderFilters(); renderList(); });
+
+function renderList() {
+  const rows = reports.filter((r) => filter === 'semua' || r.type === filter || r.status === filter);
+  $('#list').innerHTML = rows.map((r) => `
+    <button class="item" data-id="${esc(r.id)}" aria-current="${r.id === current}">
+      <div class="row" style="justify-content:space-between"><b>${esc(r.title)}</b><span class="st ${esc(r.status)}">${esc(ST[r.status] || r.status)}</span></div>
+      <small>${esc(r.type_label)} · ${new Date(r.created).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}${r.executed ? ' · dibagikan ke karyawan' : ''}</small>
+    </button>`).join('') || '<p class="muted">Belum ada report. HRD akan membuatnya otomatis sesuai jadwal meeting.</p>';
+  const pend = reports.filter((r) => r.status === 'menunggu').length;
+  $('#pendingBadge').hidden = !pend;
+  $('#pendingBadge').textContent = `${pend} menunggu`;
+  document.title = pend ? `(${pend}) Report HRD` : 'Report HRD · Kantor Agent';
+}
+$('#list').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) show(b.dataset.id); });
+
+async function show(id) {
+  current = id;
+  renderList();
+  const r = await api(`/kerja/api/reports/${encodeURIComponent(id)}`);
+  const hist = (r.history || []).map((h) => `<li>${new Date(h.at).toLocaleString('id-ID')} — <b>${esc(ST[h.status] || h.status)}</b>${h.note ? `: ${esc(h.note)}` : ''}</li>`).join('');
+  $('#detail').className = 'doc';
+  $('#detail').innerHTML = `
+    <div class="row" style="justify-content:space-between"><span class="muted">${esc(r.type_label)} · oleh ${esc(r.author || 'HRD')}</span><span class="st ${esc(r.status)}">${esc(ST[r.status] || r.status)}</span></div>
+    ${r.revises ? `<p class="muted">Revisi dari report <a href="#" data-open="${esc(r.revises)}">${esc(r.revises)}</a></p>` : ''}
+    ${md(r.content)}
+    <div class="decide">
+      <h3 style="margin-top:0">Keputusan CEO</h3>
+      ${hist ? `<ul class="muted">${hist}</ul>` : ''}
+      <label for="note" class="muted">Catatan untuk HRD (wajib untuk revisi / tolak)</label>
+      <textarea id="note" rows="3">${esc(r.status === 'menunggu' ? '' : r.ceo_note)}</textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ok" data-d="disetujui">Setujui</button>
+        <button class="btn rev" data-d="revisi">Minta revisi</button>
+        <button class="btn no" data-d="ditolak">Tolak</button>
+      </div>
+    </div>`;
+}
+$('#detail').addEventListener('click', async (e) => {
+  const o = e.target.closest('[data-open]');
+  if (o) { e.preventDefault(); return show(o.dataset.open); }
+  const b = e.target.closest('[data-d]');
+  if (!b) return;
+  try {
+    await api(`/kerja/api/reports/${encodeURIComponent(current)}`, 'PUT', { decision: b.dataset.d, note: $('#note').value });
+    toast(b.dataset.d === 'disetujui' ? 'Disetujui — HRD akan membagikannya ke karyawan' : b.dataset.d === 'revisi' ? 'Diminta revisi — HRD akan memperbaikinya' : 'Ditolak');
+    await load(); show(current);
+  } catch (err) { toast(err.message); }
+});
+
+async function load() {
+  const j = await api('/kerja/api/reports');
+  reports = j.reports;
+  renderList();
+}
+renderFilters();
+load().then(() => { const id = location.hash.slice(1) || reports.find((r) => r.status === 'menunggu')?.id; if (id) show(id); }).catch((e) => toast(e.message));
+setInterval(() => load().catch(() => {}), 30000);
+</script>
+</body>
+</html>

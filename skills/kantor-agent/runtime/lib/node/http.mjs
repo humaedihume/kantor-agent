@@ -10,7 +10,7 @@ export const SECURITY_HEADERS = {
 
 // Konfigurasi halaman (window.KANTOR): hanya nama & judul — status diambil lewat /kerja/api/state.
 export function pageConfig(cfg) {
-  return { title: cfg.title, ketua: cfg.ketua, team: cfg.team, colors: cfg.colors, spare_desks: cfg.spare_desks };
+  return { title: cfg.title, ketua: cfg.ketua, ketua_role: cfg.ketua_role, team: cfg.team, team_roles: cfg.team_roles, colors: cfg.colors, spare_desks: cfg.spare_desks, floors: cfg.floors, floor: cfg.floor, ceo: cfg.ceo };
 }
 
 // Perlindungan DNS rebinding: hanya host IP literal, localhost, *.trycloudflare.com (tunnel), atau KANTOR_ALLOWED_HOSTS.
