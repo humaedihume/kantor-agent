@@ -28,6 +28,7 @@
 //   node hrd.mjs inbox                                 pekerjaan yang BELUM diambil atau macet (perintah baru, poin revisi, lampiran gambar)
 //   node hrd.mjs task-claim <ID> --by Nama [--revs REV-001,REV-002] [--force] [--note "…"]   ambil pekerjaan (status jadi "Dikerjakan")
 //   node hrd.mjs rev-done <ID> --rev REV-001 --by Nama --note "apa yang diubah & di mana hasilnya"   satu poin revisi selesai
+//   node hrd.mjs rev-ask <ID> --rev REV-001 --by Nama --question "…"   tanya CEO per poin revisi (CEO menjawab di dashboard; poin kembali ke antrean dengan jawabannya)
 //   node hrd.mjs task-release <ID> --by Nama [--note "…"]   lepas klaim bila tidak jadi dikerjakan
 // --- Kalender kerja (jadwal posting, campaign, acara, kegiatan) — http://127.0.0.1:8788/kerja/ops#kalender
 //   node hrd.mjs cal-list [--from YYYY-MM-DD] [--to YYYY-MM-DD]   (default: 14 hari ke depan)
@@ -235,7 +236,7 @@ switch (cmd) {
       if (it.attachments.length) console.log(`Gambar   : (buka dengan Read)\n  ${it.attachments.join('\n  ')}`);
       if (it.kind === 'revisi') {
         console.log('Poin revisi dari CEO:');
-        for (const r of it.revisions) console.log(`  ${r.id} · PIC ${r.pic || it.pic}${r.subtask ? ` · subtask #${r.subtask}` : ''}${r.claimed_by ? ` · diklaim ${r.claimed_by}` : ''}\n    Masalah : ${r.problem}${r.cause ? `\n    Penyebab: ${r.cause}` : ''}${r.correction && r.correction !== r.problem ? `\n    Perbaikan: ${r.correction}` : ''}`);
+        for (const r of it.revisions) console.log(`  ${r.id} · PIC ${r.pic || it.pic}${r.subtask ? ` · subtask #${r.subtask}` : ''}${r.claimed_by ? ` · diklaim ${r.claimed_by}` : ''}\n    Masalah : ${r.problem}${r.cause ? `\n    Penyebab: ${r.cause}` : ''}${r.correction && r.correction !== r.problem ? `\n    Perbaikan: ${r.correction}` : ''}${r.answer ? `\n    JAWABAN CEO atas pertanyaanmu ("${String(r.answer.q).slice(0, 80)}"): ${r.answer.a}` : ''}`);
       }
       if (it.subtasks.length) console.log(`Subtask  : ${it.subtasks.map((x) => `#${x.no} ${x.agent}${x.agent_type ? ` (${x.agent_type})` : ''} ${x.status}`).join(' | ')}`);
     }
@@ -243,6 +244,7 @@ switch (cmd) {
   }
   case 'task-claim': OPS.claimWork(rest[0], { revs: String(opt('revs') || '').split(',').map((x) => x.trim()).filter(Boolean), force: rest.includes('--force'), note: opt('note') }, by()); done(`${rest[0]} diambil oleh ${opt('by')}`); break;
   case 'rev-done': OPS.completeRevision(rest[0], opt('rev'), by(), opt('note')); done(`${opt('rev')} selesai`); break;
+  case 'rev-ask': OPS.askCeo(rest[0], opt('rev'), by(), opt('question')); done(`${opt('rev')} menunggu jawaban CEO`); break;
   case 'task-release': OPS.releaseWork(rest[0], by(), opt('note')); done(`Klaim ${rest[0]} dilepas`); break;
   case 'cal-list': {
     const from = opt('from') || today();

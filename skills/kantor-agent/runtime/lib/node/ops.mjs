@@ -112,7 +112,7 @@ function decorate(t) {
 // status kerja: menunggu diambil / dikerjakan / macet (tidak ada kabar > 90 menit)
 const STALE_MS = 90 * 60e3;
 function queueOf(t) {
-  const pend = (t.revisions || []).filter((r) => r.status === 'In Progress');
+  const pend = (t.revisions || []).filter((r) => r.status === 'In Progress' && !r.asking);
   let kind = '';
   if (['INBOX', 'READY TO PLAN'].includes(t.status)) kind = 'baru';
   else if (t.status === 'REVISION' && pend.length) kind = 'revisi';
@@ -389,6 +389,8 @@ export function resolveRevision(id, by, note = '') {
   if (t.status !== 'REVISION') throw new Error('Task tidak sedang direvisi');
   const pending = (t.subtasks || []).filter((s) => s.status === 'REVISION');
   if (pending.length) throw new Error(`Subtask masih revisi: ${pending.map((s) => `#${s.no}`).join(', ')}`);
+  const asking = (t.revisions || []).filter((r) => r.asking && r.status === 'In Progress');
+  if (asking.length) throw new Error(`Masih menunggu jawaban CEO: ${asking.map((r) => r.id).join(', ')}`);
   t.revisions = (t.revisions || []).map((r) => (r.status === 'In Progress' ? { ...r, status: 'Done', resolved_at: nowIso(), resolved_by: line(by, 60) } : r));
   t.working = null;
   t.status = 'INTERNAL REVIEW';
@@ -505,7 +507,7 @@ export function orgChart(org) {
 export function overview(org) {
   const ov = overviewInner(org, listTasks());
   const slow = ov.queue.filter((x) => x.state === 'macet' || (x.state === 'menunggu' && Date.now() - Date.parse(x.since) > 60 * 60e3)).length;
-  ov.attention = ov.pending.length + slow;
+  ov.attention = ov.pending.length + slow + ov.critical.filter((x) => /Menunggu jawaban Anda/.test(x.issue)).length;
   return ov;
 }
 function overviewInner(org, tasks) {
@@ -530,6 +532,7 @@ function overviewInner(org, tasks) {
     else if (t.overdue) critical.push({ task: t.id, title: t.title, issue: `Lewat deadline ${t.deadline}` });
     if (t.priority === 'P0' && OPEN(t.status)) critical.push({ task: t.id, title: t.title, issue: 'Prioritas P0 (Critical) masih berjalan' });
     if (t.status === 'CLARIFICATION') critical.push({ task: t.id, title: t.title, issue: 'Menunggu jawaban klarifikasi CEO' });
+    for (const r of t.revisions || []) if (r.asking && r.status === 'In Progress') critical.push({ task: t.id, title: t.title, issue: `Menunggu jawaban Anda (${r.id}): ${String(r.asking.q).slice(0, 160)}` });
   }
   return {
     company: { divisions: org.divisions.length, subdivisions: subs, agents: agents.size, active_agents: active, tasks: tasks.length, completed: by((t) => t.status === 'COMPLETED'), in_progress: by((t) => OPEN(t.status) && !['BLOCKED', 'INBOX'].includes(t.status)), blocked: by((t) => t.status === 'BLOCKED'), overdue: by((t) => t.overdue) },
@@ -717,7 +720,39 @@ export function inbox() {
     id: t.id, title: t.title, kind: t.queue.kind, state: t.queue.state, since: t.queue.since, priority: t.priority, deadline: t.deadline,
     division: t.division, subdivision: t.subdivision, pic: t.pic, description: t.description, objective: t.objective, deliverables: t.deliverables,
     attachments: (t.attachments || []).map((n) => uploadFile(n)).filter(Boolean),
-    revisions: (t.revisions || []).filter((r) => r.status === 'In Progress' && (t.queue.state === 'macet' || !r.claimed_by)),
+    revisions: (t.revisions || []).filter((r) => r.status === 'In Progress' && !r.asking && (t.queue.state === 'macet' || !r.claimed_by)),
     subtasks: (t.subtasks || []).map((s) => ({ no: s.no, title: s.title, agent: s.agent, agent_type: s.agent_type, status: s.status, output: s.output })),
   })).sort((a, b) => a.priority.localeCompare(b.priority) || String(a.since).localeCompare(String(b.since)));
+}
+
+// agent bertanya ke CEO per poin revisi; CEO menjawab di dashboard dan poin kembali ke antrean
+export function askCeo(id, revId, by, question) {
+  const t = getTask(id);
+  if (!t) throw new Error('Task tidak ditemukan');
+  const r = (t.revisions || []).find((x) => x.id === revId);
+  if (!r) throw new Error('Poin revisi tidak ditemukan');
+  if (r.status === 'Done') throw new Error(`${revId} sudah selesai`);
+  const q = str(question, 1500);
+  if (!q) throw new Error('Tulis pertanyaan untuk CEO');
+  r.asking = { by: line(by, 60), q, at: nowIso() };
+  r.claimed_by = r.claimed_by || line(by, 60);
+  log(t, by, `${revId}: menunggu jawaban CEO`, q);
+  const saved = saveTask(t);
+  postMessage({ room: `task:${t.id}`, from: by, text: `❓ ${revId} butuh jawaban CEO: ${q}`, task: t.id, kind: 'review' });
+  postMessage({ room: 'ceo', from: by, text: `🔔 ${t.id} ${revId} menunggu jawaban Anda: ${str(q, 300)}`, task: t.id, kind: 'system' });
+  return saved;
+}
+export function answerRevision(id, revId, answer, by = 'CEO') {
+  const t = getTask(id);
+  if (!t) throw new Error('Task tidak ditemukan');
+  const r = (t.revisions || []).find((x) => x.id === revId);
+  if (!r || !r.asking) throw new Error('Poin ini tidak sedang menunggu jawaban');
+  const a = str(answer, 3000);
+  if (!a) throw new Error('Tulis jawaban');
+  r.answer = { q: r.asking.q, a, at: nowIso(), by: line(by, 60) };
+  delete r.asking; delete r.claimed_by; delete r.claimed_at;
+  log(t, by, `Jawaban untuk ${revId}`, a);
+  const saved = saveTask(t);
+  postMessage({ room: `task:${t.id}`, from: by, text: `💬 Jawaban CEO untuk ${revId}: ${a}`, task: t.id, kind: 'review' });
+  return saved;
 }

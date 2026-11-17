@@ -371,10 +371,18 @@ const stateChip = (q) => (q.state === 'dikerjakan' ? tag(`Dikerjakan: ${(q.by ||
   : q.state === 'macet' ? tag('Tidak ada kabar', 'red')
     : tag(`Menunggu diambil${q.kind === 'revisi' ? ` (${q.unclaimed} poin)` : ''}`, Date.now() - Date.parse(q.since) > 36e5 ? 'red' : 'yellow'));
 const kindLabel = (q) => (q.kind === 'revisi' ? `Revisi · ${q.open} poin` : q.kind === 'baru' ? 'Perintah baru' : 'Sedang dikerjakan');
-const revState = (r) => (r.status === 'Done'
+const revStateBase = (r, tid = '') => (r.status === 'Done'
   ? `${tag('Selesai', 'green')}<div class="small muted">${esc(r.resolved_by || r.pic || '')} · ${fmtDT(r.resolved_at)}</div>${r.result ? `<div class="small prose">${esc(r.result)}</div>` : ''}`
+  : r.asking ? `${tag('Menunggu jawaban Anda', 'orange')}<div class="small prose"><b>${esc(r.asking.by)}</b> bertanya: ${esc(r.asking.q)}</div><form data-ans data-task="${esc(tid)}" data-rev="${esc(r.id)}" style="margin-top:6px"><textarea name="answer" rows="2" required placeholder="Jawaban Anda" style="width:100%"></textarea><button class="btn pri small" style="margin-top:4px">Kirim jawaban</button></form>`
   : r.claimed_by ? `${tag(`Dikerjakan: ${r.claimed_by}`, 'blue')}<div class="small faint">sejak ${fmtDT(r.claimed_at)}</div>`
     : `${tag('Menunggu diambil', 'yellow')}<div class="small faint">diminta ${fmtDT(r.at)}</div>`);
+const revState = (r, tid = '') => revStateBase(r, tid) + (r.answer && r.status !== 'Done' ? `<div class="small muted prose">Jawaban Anda: ${esc(r.answer.a)}</div>` : '');
+document.addEventListener('submit', async (e) => {
+  const f = e.target.closest('[data-ans]');
+  if (!f) return;
+  e.preventDefault();
+  try { await api(`/kerja/api/ops/tasks/${f.dataset.task}/revisions/${f.dataset.rev}/answer`, 'POST', { answer: f.answer.value }); toast('Jawaban terkirim; pekerjaan kembali ke antrean'); openTask(f.dataset.task); render(); } catch (err) { toast(err.message); }
+});
 function queueBanner(t) {
   const q = t.queue;
   if (!q) return '';
@@ -672,6 +680,36 @@ function driveBtns(div) {
   return out.join(' ');
 }
 
+let GEM = null;
+api('/kerja/api/ops/gemini').then((j) => { GEM = j; }).catch(() => {});
+async function geminiReview(id, btn) {
+  const out = document.getElementById('gemStatus');
+  const model = (document.getElementById('gemModel') || {}).value || 'flash';
+  btn.disabled = true;
+  out.textContent = 'Mengirim ke Antigravity… (bila belum terbuka, aplikasinya dinyalakan dulu, bisa ±1 menit)';
+  let j;
+  try { j = await api('/kerja/api/ops/gemini', 'POST', { task: id, model }); } catch (e) { out.textContent = '⚠ ' + e.message; btn.disabled = false; return; }
+  out.textContent = 'Gemini sedang mereview… hasilnya muncul di sini otomatis. Percakapannya juga terlihat di aplikasi Antigravity.';
+  const t0 = Date.now();
+  const tick = async () => {
+    if (!document.getElementById('gemStatus')) return;
+    try {
+      const r = await api('/kerja/api/ops/file?path=' + encodeURIComponent(j.review));
+      if (r && r.type === 'file') { out.innerHTML = '✅ Review selesai · <a href="#" onclick="openResult(\'' + j.review + '\');return false">Buka review Gemini</a>'; btn.disabled = false; return; }
+    } catch {}
+    if (Date.now() - t0 > 15 * 60 * 1000) { out.textContent = 'Belum ada hasil setelah 15 menit. Cek jendela Antigravity (mungkin menunggu izin membaca folder).'; btn.disabled = false; return; }
+    setTimeout(tick, 6000);
+  };
+  setTimeout(tick, 6000);
+}
+function gemBox(t) {
+  if (GEM && GEM.ok === false) return `<p class="small faint">Gemini/Antigravity: ${esc(GEM.reason || 'tidak tersedia')}</p>`;
+  return `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 10px">
+    <button class="btn" type="button" onclick="geminiReview('${esc(t.id)}', this)">🤖 Review QC dengan Gemini (Antigravity)</button>
+    <select id="gemModel" style="max-width:150px"><option value="flash">Flash (cepat)</option><option value="pro">Pro (teliti)</option></select>
+    <span id="gemStatus" class="small muted"></span></div>`;
+}
+
 function workplace(t) {
   const divs = ORGC?.divisions || [];
   const di = divs.findIndex((d) => d.name === t.division);
@@ -686,6 +724,7 @@ function workplace(t) {
     ${driveBtns(t.division)}
     <button class="btn" type="button" onclick="closePeek();go('qc')">✓ Approval &amp; QC</button>
   </div>
+  ${gemBox(t)}
   ${rows ? `<div class="tw"><table class="db"><tr><th>Agent (PIC)</th><th>Status</th><th>Hasil / bukti kerja</th><th>Pantau</th></tr>${rows}</table></div>` : '<p class="empty">Belum ada agent yang ditugaskan.</p>'}`;
 }
 
@@ -736,7 +775,7 @@ async function openTask(id) {
     <select id="stSel">${Object.keys(META.statuses).filter((s) => s === t.status || !['APPROVED', 'DIVISION REVIEW', 'CEO REVIEW', 'INTERNAL REVIEW'].includes(s)).map((s) => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}</select><button class="btn" data-act="status">Simpan status</button>
     <select id="prSel">${Object.keys(META.priorities).map((p) => `<option ${p === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select><input type="date" id="dlSel" value="${t.deadline}"><button class="btn" data-act="plan">Simpan rencana</button></div></details>
   ${t.reviews.length ? `<h2 class="h">Riwayat review</h2><table class="db"><tr><th>Tahap</th><th>Reviewer</th><th>Hasil</th><th>Catatan</th><th>Waktu</th></tr>${t.reviews.map((r) => `<tr><td>${META.stages[r.stage]}</td><td>${esc(r.reviewer)}</td><td>${tag(r.result)}</td><td class="small prose">${esc(r.note)}</td><td class="small muted">${fmtDT(r.at)}</td></tr>`).join('')}</table>` : ''}
-  ${t.revisions.length ? `<h2 class="h">Revisi</h2><table class="db"><tr><th>No</th><th>Kesalahan</th><th>Penyebab</th><th>PIC</th><th>Status</th></tr>${t.revisions.map((r) => `<tr><td class="id">${r.id}</td><td class="small prose">${r.subtask ? `<span class="id">Subtask #${r.subtask}</span> ` : ''}${esc(r.problem)}</td><td class="small">${esc(r.cause)}</td><td>${esc(r.pic)}</td><td>${revState(r)}</td></tr>`).join('')}</table>` : ''}
+  ${t.revisions.length ? `<h2 class="h">Revisi</h2><table class="db"><tr><th>No</th><th>Kesalahan</th><th>Penyebab</th><th>PIC</th><th>Status</th></tr>${t.revisions.map((r) => `<tr><td class="id">${r.id}</td><td class="small prose">${r.subtask ? `<span class="id">Subtask #${r.subtask}</span> ` : ''}${esc(r.problem)}</td><td class="small">${esc(r.cause)}</td><td>${esc(r.pic)}</td><td>${revState(r, t.id)}</td></tr>`).join('')}</table>` : ''}
   <h2 class="h">Riwayat</h2><div class="hist">${t.history.slice().reverse().map((h) => `<div><span class="faint">${fmtDT(h.at)}</span> · <b style="color:var(--ink);font-weight:500">${esc(h.by)}</b> ${esc(h.action)}${h.note ? ` — ${esc(h.note)}` : ''}</div>`).join('')}</div>`);
   const b = $('#peekBody');
   const run = async (fn, msg) => { try { await fn(); toast(msg); await openTask(id); render(); } catch (err) { toast(err.message); } };

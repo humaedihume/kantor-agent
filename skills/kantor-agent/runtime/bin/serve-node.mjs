@@ -7,6 +7,8 @@
 //   KANTOR_PORT     port (default 8788)   KANTOR_BIND  alamat (default 127.0.0.1)   KANTOR_ALLOWED_HOSTS  host tambahan
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import * as AGY from '../lib/node/gemini.mjs';
+import * as AGQC from '../lib/node/gemini-qc.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -238,6 +240,7 @@ async function opsApi(req, res, p) {
         if (st.size > 600000) return json(res, 413, { error: 'File terlalu besar' });
         return json(res, 200, { type: 'file', path: rel, name: path.basename(full), text: fs.readFileSync(full, 'utf8') });
       }
+      if (p === '/kerja/api/ops/gemini') return json(res, 200, await AGY.status());
       if (p === '/kerja/api/ops/org') return json(res, 200, OPS.orgChart(org));
       if (p === '/kerja/api/ops/analytics') return json(res, 200, OPS.analytics(org));
       if (p === '/kerja/api/ops/tasks') return json(res, 200, { tasks: OPS.listTasks() });
@@ -245,6 +248,11 @@ async function opsApi(req, res, p) {
       if (p === '/kerja/api/ops/chat') return json(res, 200, { messages: OPS.readRoom(url.searchParams.get('room') || '') });
       const t = /^\/kerja\/api\/ops\/tasks\/(TASK-\d+)$/.exec(p);
       if (t) { const x = OPS.getTask(t[1]); return x ? json(res, 200, x) : json(res, 404, { error: 'Tidak ditemukan' }); }
+    }
+    if (p === '/kerja/api/ops/gemini' && req.method === 'POST') {
+      const tk = OPS.getTask(String(b.task || ''));
+      if (!tk) return json(res, 404, { error: 'Task tidak ditemukan' });
+      try { return json(res, 202, await AGQC.startReview(tk, b.model)); } catch (e) { return json(res, 502, { error: e.message }); }
     }
     if (p === '/kerja/api/ops/tasks' && req.method === 'POST') return json(res, 201, OPS.createTask(b, by));
     if (p === '/kerja/api/ops/command' && req.method === 'POST') return json(res, 201, OPS.createCommand(b, by, org));
@@ -257,6 +265,8 @@ async function opsApi(req, res, p) {
       return json(res, 201, msg);
     }
     if (p === '/kerja/api/ops/agents' && req.method === 'PUT') return json(res, 200, OPS.setAgentStatus(b.name, b.active, by, b.reason));
+    const ra = /^\/kerja\/api\/ops\/tasks\/(TASK-\d+)\/revisions\/(REV-\d+)\/answer$/.exec(p);
+    if (ra && req.method === 'POST') return json(res, 200, OPS.answerRevision(ra[1], ra[2], b.answer, by));
     const m = /^\/kerja\/api\/ops\/tasks\/(TASK-\d+)(?:\/(subtasks|submit|review|revisions|resolve))?$/.exec(p);
     if (m && write) {
       if (!m[2] && req.method === 'PUT') return json(res, 200, OPS.updateTask(m[1], b, by));
