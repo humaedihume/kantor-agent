@@ -96,7 +96,7 @@ export function getTask(id) {
   return t ? decorate(t) : null;
 }
 const saveTask = (t) => {
-  const { progress, overdue, ...clean } = t;
+  const { progress, overdue, queue, ...clean } = t;
   writeJson(path.join(tasksDir(), `${t.id}.json`), clean);
   return decorate(clean);
 };
@@ -107,7 +107,24 @@ function decorate(t) {
   let progress = w ? Math.round(subs.reduce((a, s) => a + (Number(s.weight) || 0) * pct(s.progress), 0) / w) : 0;
   if (['APPROVED', 'COMPLETED'].includes(t.status)) progress = 100;
   const overdue = !!(t.deadline && OPEN(t.status) && t.deadline < today());
-  return { ...t, progress, overdue };
+  return { ...t, progress, overdue, queue: queueOf(t) };
+}
+// status kerja: menunggu diambil / dikerjakan / macet (tidak ada kabar > 90 menit)
+const STALE_MS = 90 * 60e3;
+function queueOf(t) {
+  const pend = (t.revisions || []).filter((r) => r.status === 'In Progress');
+  let kind = '';
+  if (['INBOX', 'READY TO PLAN'].includes(t.status)) kind = 'baru';
+  else if (t.status === 'REVISION' && pend.length) kind = 'revisi';
+  else if (t.working && ['PLANNING', 'ASSIGNED', 'IN PROGRESS', 'CLARIFICATION', 'BLOCKED'].includes(t.status)) kind = 'kerja';
+  if (!kind) return null;
+  const unclaimed = kind === 'revisi' ? pend.filter((r) => !r.claimed_by) : (kind === 'baru' ? [1] : []);
+  const w = t.working;
+  const beat = w ? Date.parse(w.heartbeat || w.since) : 0;
+  let state = 'dikerjakan';
+  if (unclaimed.length) state = 'menunggu'; else if (!w || Date.now() - beat > STALE_MS) state = 'macet';
+  const since = unclaimed.length ? (kind === 'revisi' ? unclaimed.map((r) => r.at).sort()[0] : (t.updated || t.created)) : (w ? w.since : t.updated);
+  return { kind, state, since, heartbeat: w ? w.heartbeat : null, by: w ? w.by : [], open: kind === 'revisi' ? pend.length : 1, unclaimed: unclaimed.length };
 }
 function nextId() {
   let max = 0;
@@ -122,6 +139,7 @@ function nextId() {
 const log = (t, by, action, note = '') => {
   t.history = [...(t.history || []), { at: nowIso(), by: line(by, 60) || 'Sistem', action: line(action, 120), note: str(note, 2000) }];
   t.updated = nowIso();
+  if (t.working && !['CEO', 'Sistem', ''].includes(line(by, 60))) t.working.heartbeat = t.updated;
 };
 
 export function createTask(b, by = 'CEO') {
@@ -153,6 +171,8 @@ export function createTask(b, by = 'CEO') {
     blockers: [],
     result: '',
     history: [],
+    attachments: imgs(b.attachments),
+    source: line(b.source, 20),
   };
   log(t, by, 'Instruksi dibuat', t.description);
   const saved = saveTask(t);
@@ -223,6 +243,8 @@ export function upsertSubtask(id, b, by) {
     s = { no: subs.reduce((m, x) => Math.max(m, x.no), 0) + 1, status: 'ASSIGNED', progress: 0, output: '', created: nowIso(), done_at: null, revisions: 0 };
     subs.push(s);
   }
+  const prevStatus = s.status;
+  const doneRevs = [];
   if (b.title !== undefined) s.title = line(b.title, 140);
   if (b.agent !== undefined) {
     const a = line(b.agent, 60);
@@ -243,6 +265,11 @@ export function upsertSubtask(id, b, by) {
     s.status = b.status;
   }
   if (s.status === 'DONE') { s.progress = 100; s.done_at = s.done_at || nowIso(); } else s.done_at = null;
+  if (!isNew && s.status === 'DONE' && prevStatus === 'REVISION') {
+    for (const r of t.revisions || []) {
+      if (r.status === 'In Progress' && r.subtask === s.no) { r.status = 'Done'; r.resolved_at = nowIso(); r.resolved_by = line(by, 60); r.result = str(b.note || s.output, 1000); doneRevs.push(r.id); }
+    }
+  }
   t.subtasks = subs;
   if (isNew && ['INBOX', 'READY TO PLAN', 'PLANNING', 'CLARIFICATION'].includes(t.status)) t.status = 'ASSIGNED';
   if (!isNew && s.status === 'IN PROGRESS' && t.status === 'ASSIGNED') t.status = 'IN PROGRESS';
@@ -252,6 +279,7 @@ export function upsertSubtask(id, b, by) {
     ? `Delegasi → ${s.agent}: ${s.title}${s.deadline ? ` · deadline ${s.deadline}` : ''}${s.instruction ? `\n${s.instruction}` : ''}`
     : `Subtask ${s.no} · ${s.status} · ${s.progress}%${b.note ? ` — ${str(b.note, 1000)}` : ''}${b.output ? `\nOutput: ${str(b.output, 600)}` : ''}`;
   postMessage({ room: `task:${t.id}`, from: by || s.agent, text, task: t.id, kind: isNew ? 'delegation' : 'progress' });
+  if (doneRevs.length) postMessage({ room: `task:${t.id}`, from: by || s.agent, text: `✅ ${doneRevs.join(', ')} selesai direvisi (subtask #${s.no}).`, task: t.id, kind: 'progress' });
   return saved;
 }
 
@@ -263,9 +291,27 @@ export function submitForReview(id, by, note = '') {
   if (!t.subtasks?.length) throw new Error('Belum ada subtask / output untuk diperiksa');
   if (open.length) throw new Error(`Subtask belum selesai: ${open.map((s) => `#${s.no} ${s.agent}`).join(', ')}`);
   t.status = 'INTERNAL REVIEW';
+  t.working = null;
   log(t, by, 'Diserahkan untuk Subdivision Review', note);
   postMessage({ room: `task:${t.id}`, from: by, text: `Siap diperiksa kepala sub divisi.${note ? ` ${note}` : ''}`, task: t.id, kind: 'system' });
   return saveTask(t);
+}
+
+// poin revisi: tiap poin boleh menunjuk satu subtask (item.subtask = no) → PIC otomatis PIC subtask itu
+function parseItems(t, raw) {
+  return (Array.isArray(raw) ? raw : []).map((i) => {
+    const no = Number(i?.subtask) || null;
+    const s = no ? (t.subtasks || []).find((x) => x.no === no) : null;
+    if (no && !s) throw new Error(`Subtask #${no} tidak ditemukan`);
+    return { problem: str(i?.problem, 3000), cause: str(i?.cause, 1000), pic: line(i?.pic, 60) || (s ? s.agent : ''), correction: str(i?.correction, 3000), subtask: s ? s.no : null };
+  }).filter((i) => i.problem);
+}
+const itemsNote = (items) => items.map((i, n) => `${n + 1}. ${i.subtask ? `[Subtask #${i.subtask}] ` : ''}${i.problem}`).join('\n');
+function reopenSubtasks(t, nos) {
+  const set = new Set(nos.map(Number));
+  for (const s of t.subtasks || []) {
+    if (set.has(s.no)) { if (s.status !== 'REVISION') s.revisions = (s.revisions || 0) + 1; s.status = 'REVISION'; s.done_at = null; }
+  }
 }
 
 export function review(id, b, by) {
@@ -276,31 +322,63 @@ export function review(id, b, by) {
   if (t.status !== STAGE_STATUS[stage]) throw new Error(`Task berstatus ${t.status}; ${STAGES[stage]} hanya untuk status ${STAGE_STATUS[stage]}`);
   const result = b.result;
   if (!['lolos', 'revisi', 'ditolak'].includes(result)) throw new Error('Hasil review: lolos, revisi, atau ditolak');
-  if (result !== 'lolos' && !str(b.note)) throw new Error('Tulis catatan untuk revisi / penolakan');
+  // banyak poin revisi sekaligus: b.items = [{ problem, cause?, pic?, correction? }]
+  const items = parseItems(t, b.items);
+  const note = str(b.note, 3000) || itemsNote(items);
+  if (result !== 'lolos' && !note) throw new Error('Tulis catatan atau poin untuk revisi / penolakan');
   if (result === 'ditolak' && stage !== 'ceo') throw new Error('Hanya CEO yang dapat menolak hasil pekerjaan');
   const checklist = (CHECKLISTS[stage] || []).map((item) => ({ item, ok: Array.isArray(b.checked) ? b.checked.includes(item) : false }));
   if (result === 'lolos' && checklist.some((c) => !c.ok)) throw new Error('Semua checklist harus dicentang agar lolos');
-  t.reviews = [...(t.reviews || []), { at: nowIso(), stage, reviewer: line(by, 60), result, note: str(b.note, 3000), checklist }];
+  t.reviews = [...(t.reviews || []), { at: nowIso(), stage, reviewer: line(by, 60), result, note, checklist }];
+  t.working = null;
   if (result === 'lolos') {
     t.status = NEXT[stage];
+    // persetujuan CEO langsung menyelesaikan task (APPROVED → COMPLETED otomatis)
+    if (stage === 'ceo') { log(t, by, 'Disetujui CEO (APPROVED)', b.note); t.status = 'COMPLETED'; }
   } else if (result === 'ditolak') {
     t.status = 'CANCELLED';
   } else {
-    const no = (t.revisions || []).length + 1;
-    const rev = {
-      id: `REV-${String(no).padStart(3, '0')}`, at: nowIso(), date: today(), stage, reviewer: line(by, 60),
-      problem: str(b.note, 3000), cause: str(b.cause, 1000), correction: str(b.correction, 3000) || str(b.note, 3000),
-      pic: line(b.pic, 60) || t.pic, deadline: date(b.deadline), status: 'In Progress', resolved_at: null,
-    };
-    t.revisions = [...(t.revisions || []), rev];
-    t.status = 'REVISION';
-    // subtask milik PIC revisi dikembalikan ke REVISION
-    for (const s of t.subtasks || []) {
-      if (Array.isArray(b.subtasks) && b.subtasks.map(Number).includes(s.no)) { s.status = 'REVISION'; s.revisions = (s.revisions || 0) + 1; s.done_at = null; }
+    const list = items.length ? items : [{ problem: note, cause: str(b.cause, 1000), correction: str(b.correction, 3000) || note, pic: line(b.pic, 60) }];
+    for (const it of list) {
+      const no = (t.revisions || []).length + 1;
+      t.revisions = [...(t.revisions || []), {
+        id: `REV-${String(no).padStart(3, '0')}`, at: nowIso(), date: today(), stage, reviewer: line(by, 60),
+        problem: it.problem, cause: it.cause || str(b.cause, 1000), correction: it.correction || it.problem,
+        pic: it.pic || line(b.pic, 60) || t.pic, subtask: it.subtask || null, deadline: date(b.deadline), status: 'In Progress', resolved_at: null,
+      }];
     }
+    t.status = 'REVISION';
+    // subtask yang ditunjuk (per poin atau daftar b.subtasks) dikembalikan ke REVISION
+    reopenSubtasks(t, [...(Array.isArray(b.subtasks) ? b.subtasks : []), ...list.map((x) => x.subtask).filter(Boolean)]);
   }
-  log(t, by, `${STAGES[stage]}: ${result}`, b.note);
-  postMessage({ room: `task:${t.id}`, from: by, text: `${STAGES[stage]} → ${result.toUpperCase()}${b.note ? `\n${str(b.note, 1500)}` : ''}`, task: t.id, kind: 'review' });
+  log(t, by, `${STAGES[stage]}: ${result}`, note);
+  postMessage({ room: `task:${t.id}`, from: by, text: `${STAGES[stage]} → ${result.toUpperCase()}${note ? `\n${str(note, 1500)}` : ''}`, task: t.id, kind: 'review' });
+  // revisi selesai & lolos QC sub + divisi → beri tahu CEO agar mengecek ulang
+  if (result === 'lolos' && t.status === 'CEO REVIEW' && (t.revisions || []).length) {
+    postMessage({ room: 'ceo', from: by, text: `🔔 ${t.id} ${t.title}: revisi selesai dan sudah lolos QC, siap dicek ulang oleh CEO.`, task: t.id, kind: 'system' });
+  }
+  return saveTask(t);
+}
+
+// tambah poin revisi kapan saja selama task berstatus REVISION: b.items = [{ problem, cause?, pic?, correction? }], b.subtasks = [no]
+export function addRevisions(id, b, by) {
+  const t = getTask(id);
+  if (!t) throw new Error('Task tidak ditemukan');
+  if (t.status !== 'REVISION') throw new Error('Poin revisi tambahan hanya untuk task berstatus REVISION');
+  const items = parseItems(t, b.items);
+  if (!items.length) throw new Error('Tulis minimal satu poin revisi');
+  for (const it of items) {
+    const no = (t.revisions || []).length + 1;
+    t.revisions = [...(t.revisions || []), {
+      id: `REV-${String(no).padStart(3, '0')}`, at: nowIso(), date: today(), stage: 'ceo', reviewer: line(by, 60),
+      problem: it.problem, cause: it.cause, correction: it.correction || it.problem,
+      pic: it.pic || t.pic, subtask: it.subtask || null, deadline: date(b.deadline), status: 'In Progress', resolved_at: null,
+    }];
+  }
+  reopenSubtasks(t, [...(Array.isArray(b.subtasks) ? b.subtasks : []), ...items.map((x) => x.subtask).filter(Boolean)]);
+  const note = itemsNote(items);
+  log(t, by, `Poin revisi ditambahkan (${items.length})`, note);
+  postMessage({ room: `task:${t.id}`, from: by, text: `Poin revisi tambahan:\n${str(note, 1500)}`, task: t.id, kind: 'review' });
   return saveTask(t);
 }
 
@@ -311,7 +389,8 @@ export function resolveRevision(id, by, note = '') {
   if (t.status !== 'REVISION') throw new Error('Task tidak sedang direvisi');
   const pending = (t.subtasks || []).filter((s) => s.status === 'REVISION');
   if (pending.length) throw new Error(`Subtask masih revisi: ${pending.map((s) => `#${s.no}`).join(', ')}`);
-  t.revisions = (t.revisions || []).map((r) => (r.status === 'In Progress' ? { ...r, status: 'Done', resolved_at: nowIso() } : r));
+  t.revisions = (t.revisions || []).map((r) => (r.status === 'In Progress' ? { ...r, status: 'Done', resolved_at: nowIso(), resolved_by: line(by, 60) } : r));
+  t.working = null;
   t.status = 'INTERNAL REVIEW';
   log(t, by, 'Revisi selesai, kembali ke Subdivision Review', note);
   postMessage({ room: `task:${t.id}`, from: by, text: `Revisi selesai, diperiksa ulang.${note ? ` ${note}` : ''}`, task: t.id, kind: 'system' });
@@ -336,13 +415,14 @@ export function postMessage(m) {
   if (!ROOM.test(room)) throw new Error('Ruang chat tidak dikenal');
   const sticker = STICKERS[m.sticker] ? m.sticker : '';
   const text = str(m.text, 8000);
-  if (!text && !sticker) throw new Error('Pesan kosong');
+  const images = imgs(m.images);
+  if (!text && !sticker && !images.length) throw new Error('Pesan kosong');
   const reply = /^[a-z0-9-]{6,40}$/.test(String(m.reply_to || '')) ? readRoom(room, 2000).find((x) => x.id === m.reply_to) : null;
   const msg = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    at: nowIso(), room, from: line(m.from, 60) || 'Anonim', role: line(m.role, 60), text, sticker,
+    at: nowIso(), room, from: line(m.from, 60) || 'Anonim', role: line(m.role, 60), text, sticker, images,
     mood: MOODS[m.mood] ? m.mood : '',
-    reply_to: reply ? { id: reply.id, from: reply.from, text: (reply.text || (reply.sticker ? STICKERS[reply.sticker]?.join(' ') : '')).slice(0, 160) } : null,
+    reply_to: reply ? { id: reply.id, from: reply.from, text: (reply.text || (reply.sticker ? STICKERS[reply.sticker]?.join(' ') : (reply.images?.length ? '📷 gambar' : ''))).slice(0, 160) } : null,
     task: TID.test(String(m.task || '')) ? m.task : (/TASK-\d{3,6}/.exec(text)?.[0] || ''),
     kind: line(m.kind, 20) || 'chat',
     ...(m.auto ? { auto: line(m.auto, 20) } : {}),
@@ -423,7 +503,12 @@ export function orgChart(org) {
 
 // ---------------- dashboard CEO
 export function overview(org) {
-  const tasks = listTasks();
+  const ov = overviewInner(org, listTasks());
+  const slow = ov.queue.filter((x) => x.state === 'macet' || (x.state === 'menunggu' && Date.now() - Date.parse(x.since) > 60 * 60e3)).length;
+  ov.attention = ov.pending.length + slow;
+  return ov;
+}
+function overviewInner(org, tasks) {
   const by = (f) => tasks.filter(f).length;
   const agents = new Set();
   let subs = 0;
@@ -452,6 +537,8 @@ export function overview(org) {
     active: tasks.filter((t) => OPEN(t.status)),
     pending: tasks.filter((t) => ['CEO REVIEW', 'WAITING APPROVAL', 'CLARIFICATION'].includes(t.status) || (t.status === 'APPROVED')),
     critical,
+    queue: queueList(),
+    attention: 0,
     recent: recentActivity(25),
   };
 }
@@ -506,3 +593,131 @@ export function analytics(org) {
   return { rate, agents, subdivisions, heads, weights: { 'Quality of Work': 30, 'Task Completion': 20, Accuracy: 20, Timeliness: 15, Collaboration: 10, Communication: 5 } };
 }
 const category = (s) => (s >= 90 ? 'Excellent' : s >= 80 ? 'Very Good' : s >= 70 ? 'Good' : s >= 60 ? 'Needs Improvement' : 'Poor');
+
+
+// ---------------- gambar lampiran chat & perintah
+export const uploadsDir = () => path.join(opsDir(), 'uploads');
+export const UPLOAD_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+const UP_RE = /^[a-z0-9]{6,14}-[a-z0-9]{3,8}\.(png|jpg|webp|gif)$/;
+function sniff(buf) {
+  if (buf.length > 12 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length > 6 && buf.toString('latin1', 0, 4) === 'GIF8') return 'gif';
+  if (buf.length > 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return '';
+}
+// jenis file ditentukan dari isinya (bukan nama/ekstensi dari pengirim); SVG/HTML ditolak
+export function saveUpload(buf) {
+  if (!buf || !buf.length) throw new Error('File kosong');
+  if (buf.length > 8 * 1024 * 1024) throw new Error('Gambar terlalu besar (maks 8 MB)');
+  const ext = sniff(buf);
+  if (!ext) throw new Error('Hanya gambar PNG, JPG, WEBP, atau GIF');
+  const name = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  fs.mkdirSync(uploadsDir(), { recursive: true });
+  fs.writeFileSync(path.join(uploadsDir(), name), buf);
+  return { name, size: buf.length };
+}
+export function uploadFile(name) {
+  if (!UP_RE.test(String(name))) return null;
+  const f = path.join(uploadsDir(), String(name));
+  return fs.existsSync(f) ? f : null;
+}
+function imgs(a) { return (Array.isArray(a) ? a : []).map(String).filter((n) => uploadFile(n)).slice(0, 10); }
+
+// ---------------- perintah CEO ke divisi: satu task per divisi tujuan, gambar ikut jadi lampiran task
+export function createCommand(b, by = 'CEO', org) {
+  const text = str(b.text, 6000);
+  const images = imgs(b.images);
+  if (!text && !images.length) throw new Error('Tulis perintah atau lampirkan gambar');
+  const room = String(b.room || '');
+  const divOf = (id) => org.divisions.find((d) => d.id === id);
+  const targets = [];
+  let m;
+  if ((m = /^div:(.+)$/.exec(room))) { const d = divOf(m[1]); if (d) targets.push({ d }); }
+  else if ((m = /^sub:([^:]+):(.+)$/.exec(room))) { const d = divOf(m[1]); const s = d?.subdivisions.find((x) => slug(x.name) === m[2]); if (d && s) targets.push({ d, s }); }
+  else if (room.startsWith('task:')) throw new Error('Perintah tidak dikirim dari thread task; tulis sebagai pesan biasa');
+  else for (const id of Array.isArray(b.divisions) ? b.divisions : []) { const d = divOf(String(id)); if (d && !targets.some((x) => x.d.id === d.id)) targets.push({ d }); }
+  if (!targets.length) throw new Error('Pilih divisi tujuan perintah');
+  const first = text.split('\n').map((x) => x.trim()).find(Boolean) || '';
+  const title = line(b.title, 140) || (first.length > 90 ? `${first.slice(0, 87)}...` : first) || 'Perintah dengan gambar';
+  const priority = PRIORITIES[b.priority] ? b.priority : 'P2';
+  const made = [];
+  for (const { d, s } of targets) {
+    const head = (s?.head && (s.head.name || s.head.agent)) ? s.head : d.head;
+    const pic = head?.name || head?.agent || '';
+    const t = createTask({ title, division: d.name, subdivision: s?.name || '', pic, priority, deadline: b.deadline, description: text, attachments: images, requester: by, source: 'perintah' }, by);
+    made.push(t);
+    postMessage({ room: s ? `sub:${d.id}:${slug(s.name)}` : `div:${d.id}`, from: by, role: 'CEO', text, images, task: t.id, kind: 'command' });
+  }
+  if (!room.startsWith('div:') && !room.startsWith('sub:')) {
+    postMessage({ room, from: by, role: 'CEO', text: `${text}${text ? '\n' : ''}→ ${made.map((t) => `${t.division} (${t.id})`).join(', ')}`, images, task: made[0].id, kind: 'command' });
+  }
+  return { tasks: made };
+}
+
+// ---------------- klaim pekerjaan oleh agent, antrean & inbox
+export function claimWork(id, b, by) {
+  const t = getTask(id);
+  if (!t) throw new Error('Task tidak ditemukan');
+  const who = line(by, 60);
+  if (!who || who === 'CEO') throw new Error('Klaim pekerjaan hanya oleh agent (--by <nama agent>)');
+  const now = nowIso();
+  let what = '';
+  let kind = 'baru';
+  if (t.status === 'REVISION') {
+    const want = Array.isArray(b.revs) && b.revs.length ? new Set(b.revs) : null;
+    const mine = (t.revisions || []).filter((r) => r.status === 'In Progress' && (b.force || !r.claimed_by) && (!want || want.has(r.id)));
+    if (!mine.length) throw new Error('Tidak ada poin revisi yang belum diambil (pakai --force untuk mengambil alih yang macet)');
+    for (const r of mine) { r.claimed_by = who; r.claimed_at = now; }
+    what = `revisi ${mine.map((r) => r.id).join(', ')}`;
+    kind = 'revisi';
+  } else if (['INBOX', 'READY TO PLAN'].includes(t.status)) {
+    t.status = 'PLANNING';
+    what = 'perintah baru';
+  } else throw new Error(`Task berstatus ${t.status}; tidak ada yang perlu diambil`);
+  const names = new Set([...(t.working?.by || []), who]);
+  t.working = { by: [...names], since: t.working?.since || now, heartbeat: now, kind };
+  log(t, who, `Mulai mengerjakan ${what}`, b.note);
+  const saved = saveTask(t);
+  postMessage({ room: `task:${t.id}`, from: who, text: `▶ Mulai mengerjakan ${what}.${b.note ? ` ${str(b.note, 500)}` : ''}`, task: t.id, kind: 'progress' });
+  return saved;
+}
+export function completeRevision(id, revId, by, note = '') {
+  const t = getTask(id);
+  if (!t) throw new Error('Task tidak ditemukan');
+  const r = (t.revisions || []).find((x) => x.id === revId);
+  if (!r) throw new Error('Poin revisi tidak ditemukan');
+  if (r.status === 'Done') throw new Error(`${revId} sudah selesai`);
+  if (!str(note)) throw new Error('Tulis ringkasan perbaikan: apa yang diubah dan di mana hasilnya');
+  r.status = 'Done'; r.resolved_at = nowIso(); r.resolved_by = line(by, 60); r.result = str(note, 1500);
+  log(t, by, `${revId} selesai`, note);
+  const saved = saveTask(t);
+  postMessage({ room: `task:${t.id}`, from: by, text: `✅ ${revId} selesai: ${str(note, 800)}`, task: t.id, kind: 'progress' });
+  return saved;
+}
+export function releaseWork(id, by, note = '') {
+  const t = getTask(id);
+  if (!t) throw new Error('Task tidak ditemukan');
+  for (const r of t.revisions || []) if (r.status === 'In Progress' && r.claimed_by) { delete r.claimed_by; delete r.claimed_at; }
+  t.working = null;
+  if (t.status === 'PLANNING') t.status = 'INBOX';
+  log(t, by, 'Klaim dilepas', note);
+  const saved = saveTask(t);
+  postMessage({ room: `task:${t.id}`, from: by, text: `⏸ Klaim dilepas.${note ? ` ${str(note, 400)}` : ''}`, task: t.id, kind: 'progress' });
+  return saved;
+}
+export function queueList() {
+  const W = { macet: 0, menunggu: 1, dikerjakan: 2 };
+  return listTasks().filter((t) => t.queue).map((t) => ({ task: t.id, title: t.title, pic: t.pic, division: t.division, priority: t.priority, ...t.queue }))
+    .sort((a, b) => W[a.state] - W[b.state] || String(a.since).localeCompare(String(b.since)));
+}
+// untuk pemroses terjadwal / `hrd.mjs inbox`: pekerjaan yang belum diambil atau macet
+export function inbox() {
+  return listTasks().filter((t) => t.queue && ['menunggu', 'macet'].includes(t.queue.state)).map((t) => ({
+    id: t.id, title: t.title, kind: t.queue.kind, state: t.queue.state, since: t.queue.since, priority: t.priority, deadline: t.deadline,
+    division: t.division, subdivision: t.subdivision, pic: t.pic, description: t.description, objective: t.objective, deliverables: t.deliverables,
+    attachments: (t.attachments || []).map((n) => uploadFile(n)).filter(Boolean),
+    revisions: (t.revisions || []).filter((r) => r.status === 'In Progress' && (t.queue.state === 'macet' || !r.claimed_by)),
+    subtasks: (t.subtasks || []).map((s) => ({ no: s.no, title: s.title, agent: s.agent, agent_type: s.agent_type, status: s.status, output: s.output })),
+  })).sort((a, b) => a.priority.localeCompare(b.priority) || String(a.since).localeCompare(String(b.since)));
+}

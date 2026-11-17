@@ -150,6 +150,15 @@ function crewOf(d) {
   return [...core, ...free].map((p) => ({ ...p, name: p.name || p.agent }));
 }
 // konfigurasi kantor untuk satu lantai (cfg dasar dari loadConfig)
+// tema ruangan lantai: dari id/nama divisi (kata kunci), mis. finance, marketing, operasional ...
+const THEME_KEYS = [['finance', /financ|keuangan|akunt/], ['marketing', /market|pemasaran/], ['business-development', /business|bisnis|bizdev/],
+  ['operasional', /operas|event/], ['sales', /sales|penjualan|customer/], ['creative', /creative|kreatif|produksi|production/],
+  ['it-digital', /\bit\b|digital|teknologi/], ['legal-ga', /legal|hukum|general affairs/]];
+export function themeOf(d) {
+  const k = `${d.id || ''} ${d.name || ''}`.toLowerCase();
+  const hit = THEME_KEYS.find(([, re]) => re.test(k));
+  return hit ? hit[0] : 'umum';
+}
 export function floorConfig(cfg, org, n) {
   const floors = floorList(org);
   const f = floors.find((x) => x.n === n) || floors[0];
@@ -161,6 +170,7 @@ export function floorConfig(cfg, org, n) {
       ...base,
       ketua: org.hrd.name || cfg.ketua,
       ketua_role: 'HRD',
+      theme: 'direksi',
       title: `${cfg.title} · Lantai 1 · Direksi & HRD`,
       ceo: org.ceo.name,
       // hanya orang dari struktur organisasi: tanpa tim bawaan (Budi, Sari, …); subagent lain tampil sebagai
@@ -176,7 +186,7 @@ export function floorConfig(cfg, org, n) {
   const crew = crewOf(d);
   const leader = crew[0] || null;
   const rest = crew.slice(1);
-  const team = rest.filter((p) => !p.role.startsWith('Freelance')).slice(0, 4);
+  const team = rest.filter((p) => !p.role.startsWith('Freelance')).slice(0, 15);
   const extra = rest.filter((p) => !team.includes(p));
   const agentsHere = new Set(crew.map((p) => low(p.agent)).filter(Boolean));
   const flByAgent = new Map();
@@ -191,6 +201,7 @@ export function floorConfig(cfg, org, n) {
     agents: team.map((p) => p.agent || null),
     freelancers: extra.length ? [...new Set(extra.map((p) => p.name))] : ['Tamu'],
     colors: { ...cfg.colors, ketua: d.color },
+    theme: themeOf(d),
     floorRules: {
       accept: (t) => agentsHere.has(low(t)),
       leaderAgent: leader && leader.agent ? low(leader.agent) : null,

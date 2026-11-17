@@ -24,6 +24,16 @@
 //   node hrd.mjs chat --room ROOM --by Nama [--text "…"] [--sticker kopi] [--mood senang] [--reply <id>] [--role "…"]
 //                                                      room: company|ceo|div:<id>|sub:<div>:<sub>|task:TASK-001 · daftar stiker: node hrd.mjs stickers
 //   node hrd.mjs chat-read --room ROOM [--limit 30]
+// --- Antrean kerja (perintah & revisi dari CEO) — WAJIB dipakai agar CEO tahu siapa mengerjakan apa
+//   node hrd.mjs inbox                                 pekerjaan yang BELUM diambil atau macet (perintah baru, poin revisi, lampiran gambar)
+//   node hrd.mjs task-claim <ID> --by Nama [--revs REV-001,REV-002] [--force] [--note "…"]   ambil pekerjaan (status jadi "Dikerjakan")
+//   node hrd.mjs rev-done <ID> --rev REV-001 --by Nama --note "apa yang diubah & di mana hasilnya"   satu poin revisi selesai
+//   node hrd.mjs task-release <ID> --by Nama [--note "…"]   lepas klaim bila tidak jadi dikerjakan
+// --- Kalender kerja (jadwal posting, campaign, acara, kegiatan) — http://127.0.0.1:8788/kerja/ops#kalender
+//   node hrd.mjs cal-list [--from YYYY-MM-DD] [--to YYYY-MM-DD]   (default: 14 hari ke depan)
+//   node hrd.mjs cal-add --title "…" --date YYYY-MM-DD [--time HH:MM] [--type posting|campaign|acara|meeting|operasional|lainnya] [--platform Instagram|TikTok|Threads|WhatsApp Business|Website]
+//        [--division D] [--owner Nama] [--notes "…"] [--link URL] [--task TASK-001] [--needs-ceo] [--repeat weekly|monthly] --by Nama
+//   node hrd.mjs cal-status <CAL-ID> --status rencana|dikerjakan|menunggu\ izin|siap|selesai|batal --by Nama [--note "…"]   (konten wajib izin CEO: Siap/Selesai hanya CEO)
 // Tipe: harian-pagi | harian-sore | mingguan | bulanan | lainnya
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 const ORG = await import(new URL('../lib/node/org.mjs', import.meta.url));
 const BRAND = await import(new URL('../lib/node/brand.mjs', import.meta.url));
 const OPS = await import(new URL('../lib/node/ops.mjs', import.meta.url));
+const KAL = await import(new URL('../lib/node/kalender.mjs', import.meta.url));
 const [cmd, ...rest] = process.argv.slice(2);
 const opt = (k) => {
   const i = rest.indexOf(`--${k}`);
@@ -214,7 +225,40 @@ switch (cmd) {
     }
     break;
   case 'stickers': console.log(`Stiker: ${Object.entries(OPS.STICKERS).map(([k, [e, c]]) => `${k} ${e} "${c}"`).join(' · ')}\nMood: ${Object.entries(OPS.MOODS).map(([k, e]) => `${k} ${e}`).join(' · ')}`); break;
+  case 'inbox': {
+    const items = OPS.inbox();
+    if (!items.length) { console.log('Antrean kosong: tidak ada perintah baru atau revisi yang menunggu.'); break; }
+    for (const it of items) {
+      console.log(`\n=== ${it.id} [${it.kind.toUpperCase()}] ${it.priority} · ${it.state}${it.state === 'macet' ? ' (klaim lama tanpa kabar: pakai --force)' : ''} · menunggu sejak ${it.since}`);
+      console.log(`Judul    : ${it.title}\nDivisi   : ${it.division}${it.subdivision ? ` / ${it.subdivision}` : ''} · PIC ${it.pic || '-'} · deadline ${it.deadline || '-'}`);
+      if (it.description) console.log(`Perintah : ${it.description}`);
+      if (it.attachments.length) console.log(`Gambar   : (buka dengan Read)\n  ${it.attachments.join('\n  ')}`);
+      if (it.kind === 'revisi') {
+        console.log('Poin revisi dari CEO:');
+        for (const r of it.revisions) console.log(`  ${r.id} · PIC ${r.pic || it.pic}${r.subtask ? ` · subtask #${r.subtask}` : ''}${r.claimed_by ? ` · diklaim ${r.claimed_by}` : ''}\n    Masalah : ${r.problem}${r.cause ? `\n    Penyebab: ${r.cause}` : ''}${r.correction && r.correction !== r.problem ? `\n    Perbaikan: ${r.correction}` : ''}`);
+      }
+      if (it.subtasks.length) console.log(`Subtask  : ${it.subtasks.map((x) => `#${x.no} ${x.agent}${x.agent_type ? ` (${x.agent_type})` : ''} ${x.status}`).join(' | ')}`);
+    }
+    break;
+  }
+  case 'task-claim': OPS.claimWork(rest[0], { revs: String(opt('revs') || '').split(',').map((x) => x.trim()).filter(Boolean), force: rest.includes('--force'), note: opt('note') }, by()); done(`${rest[0]} diambil oleh ${opt('by')}`); break;
+  case 'rev-done': OPS.completeRevision(rest[0], opt('rev'), by(), opt('note')); done(`${opt('rev')} selesai`); break;
+  case 'task-release': OPS.releaseWork(rest[0], by(), opt('note')); done(`Klaim ${rest[0]} dilepas`); break;
+  case 'cal-list': {
+    const from = opt('from') || today();
+    const to = opt('to') || new Date(Date.now() + 14 * 86400e3).toLocaleDateString('sv-SE');
+    const ev = KAL.listRange(from, to);
+    if (!ev.length) console.log(`Tidak ada jadwal ${from} s.d. ${to}.`);
+    for (const e of ev) console.log(`${e.date} ${e.time || '     '} ${(KAL.CAL_TYPES[e.type] || e.type).padEnd(10)} ${String(e.status).padEnd(15)} ${e.id || '(otomatis)'} ${e.title}${e.platform ? ` [${e.platform}]` : ''}${e.owner ? ` · ${e.owner}` : ''}${e.needs_ceo && !e.approved_by ? ' · WAJIB IZIN CEO' : ''}`);
+    break;
+  }
+  case 'cal-add': {
+    const e = KAL.addEvent({ title: opt('title'), date: opt('date'), time: opt('time'), end_time: opt('end-time'), type: opt('type'), platform: opt('platform'), division: opt('division'), owner: opt('owner'), notes: opt('notes'), link: opt('link'), task: opt('task'), needs_ceo: rest.includes('--needs-ceo'), repeat: opt('repeat') }, by());
+    console.log(`Jadwal ${e.id} dibuat (${e.date}${e.time ? ` ${e.time}` : ''}) — lihat http://127.0.0.1:8788/kerja/ops#kalender`);
+    break;
+  }
+  case 'cal-status': { const e = KAL.updateEvent(rest[0], { status: opt('status'), note: opt('note') }, by(), opt('by') === 'CEO'); console.log(`${e.id} → ${e.status}`); break; }
   default:
-    console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 28).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+    console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 46).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
 }
 } catch (e) { fail(`Gagal: ${e.message}`); }

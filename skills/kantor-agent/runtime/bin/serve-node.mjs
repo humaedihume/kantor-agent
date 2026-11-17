@@ -33,6 +33,7 @@ const AG = await import(new URL('../lib/node/agents.mjs', import.meta.url));
 const ORG = await import(new URL('../lib/node/org.mjs', import.meta.url));
 const BRAND = await import(new URL('../lib/node/brand.mjs', import.meta.url));
 const OPS = await import(new URL('../lib/node/ops.mjs', import.meta.url));
+const KAL = await import(new URL('../lib/node/kalender.mjs', import.meta.url));
 // obrolan ringan otomatis di grup chat (matikan dengan KANTOR_CHATTER=0)
 const CHATTER = process.env.KANTOR_CHATTER === '0' ? null : (await import(new URL('../lib/node/chatter.mjs', import.meta.url))).startChatter({ OPS, ORG, opsDir: OPS.opsDir });
 const { pageConfig, hostAllowed, SECURITY_HEADERS } = await import(new URL('../lib/node/http.mjs', import.meta.url));
@@ -210,8 +211,33 @@ async function opsApi(req, res, p) {
     const b = write ? await readBody(req) : {};
     const by = String(b.by || org.ceo.name || 'CEO');
     if (req.method === 'GET') {
-      if (p === '/kerja/api/ops/meta') return json(res, 200, { statuses: OPS.STATUSES, priorities: OPS.PRIORITIES, sub_statuses: OPS.SUB_STATUSES, stages: OPS.STAGES, checklists: OPS.CHECKLISTS, stickers: OPS.STICKERS, moods: OPS.MOODS, ceo: org.ceo.name, dir: OPS.opsDir() });
+      if (p === '/kerja/api/ops/meta') return json(res, 200, { statuses: OPS.STATUSES, priorities: OPS.PRIORITIES, sub_statuses: OPS.SUB_STATUSES, stages: OPS.STAGES, checklists: OPS.CHECKLISTS, stickers: OPS.STICKERS, moods: OPS.MOODS, cal: { types: KAL.CAL_TYPES, status: KAL.CAL_STATUS, platforms: KAL.CAL_PLATFORMS, repeat: KAL.CAL_REPEAT }, ceo: org.ceo.name, dir: OPS.opsDir() });
+      const im = /^\/kerja\/api\/ops\/img\/([a-z0-9.-]+)$/.exec(p);
+      if (im) {
+        const f = OPS.uploadFile(im[1]);
+        if (!f) return send(res, 404, {}, '');
+        return send(res, 200, { 'Content-Type': OPS.UPLOAD_TYPES[path.extname(f).slice(1)], 'Cache-Control': 'private, max-age=86400', 'Content-Security-Policy': "default-src 'none'; sandbox" }, fs.readFileSync(f));
+      }
+      if (p === '/kerja/api/ops/calendar') return json(res, 200, { events: KAL.listRange(url.searchParams.get('from'), url.searchParams.get('to')) });
+      if (p === '/kerja/api/ops/inbox') return json(res, 200, { items: OPS.inbox() });
       if (p === '/kerja/api/ops/overview') return json(res, 200, OPS.overview(org));
+      if (p === '/kerja/api/ops/drive') {
+        try { const dj = JSON.parse(fs.readFileSync(path.join(process.env.KANTOR_PROJECT || process.cwd(), 'kantor', 'drive.json'), 'utf8')); return json(res, 200, { root: dj.root, folder: dj.folder }); } catch { return json(res, 200, { root: '', folder: {} }); }
+      }
+      if (p === '/kerja/api/ops/file') {
+        const root = process.env.KANTOR_PROJECT || process.cwd();
+        const hasil = path.resolve(root, 'hasil');
+        const rel = String(url.searchParams.get('path') || '').split(String.fromCharCode(92)).join('/').replace(/^\/+/, '');
+        let full;
+        try { full = fs.realpathSync(path.resolve(root, rel)); } catch { return json(res, 404, { error: 'Tidak ditemukan' }); }
+        const hr = fs.existsSync(hasil) ? fs.realpathSync(hasil) : hasil;
+        if (full !== hr && !full.startsWith(hr + path.sep)) return json(res, 403, { error: 'Hanya folder hasil/ yang boleh dibuka' });
+        const st = fs.statSync(full);
+        if (st.isDirectory()) return json(res, 200, { type: 'dir', path: rel, files: fs.readdirSync(full, { withFileTypes: true }).map((d) => ({ name: d.name, dir: d.isDirectory(), size: d.isDirectory() ? 0 : fs.statSync(path.join(full, d.name)).size })) });
+        if (!/\.(md|csv|txt|json|html?)$/i.test(full)) return json(res, 415, { error: 'Tipe file tidak bisa ditampilkan' });
+        if (st.size > 600000) return json(res, 413, { error: 'File terlalu besar' });
+        return json(res, 200, { type: 'file', path: rel, name: path.basename(full), text: fs.readFileSync(full, 'utf8') });
+      }
       if (p === '/kerja/api/ops/org') return json(res, 200, OPS.orgChart(org));
       if (p === '/kerja/api/ops/analytics') return json(res, 200, OPS.analytics(org));
       if (p === '/kerja/api/ops/tasks') return json(res, 200, { tasks: OPS.listTasks() });
@@ -221,18 +247,23 @@ async function opsApi(req, res, p) {
       if (t) { const x = OPS.getTask(t[1]); return x ? json(res, 200, x) : json(res, 404, { error: 'Tidak ditemukan' }); }
     }
     if (p === '/kerja/api/ops/tasks' && req.method === 'POST') return json(res, 201, OPS.createTask(b, by));
+    if (p === '/kerja/api/ops/command' && req.method === 'POST') return json(res, 201, OPS.createCommand(b, by, org));
+    if (p === '/kerja/api/ops/calendar' && req.method === 'POST') return json(res, 201, KAL.addEvent(b, by));
+    const ce = /^\/kerja\/api\/ops\/calendar\/(CAL-\d+)$/.exec(p);
+    if (ce && req.method === 'PUT') return json(res, 200, KAL.updateEvent(ce[1], b, by, by === org.ceo.name || by === 'CEO'));
     if (p === '/kerja/api/ops/chat' && req.method === 'POST') {
       const msg = OPS.postMessage({ ...b, from: by, role: b.role || 'CEO', auto: undefined });
-      CHATTER?.onCeoMessage(msg).catch(() => {});
+      if (!msg.images?.length) CHATTER?.onCeoMessage(msg).catch(() => {});
       return json(res, 201, msg);
     }
     if (p === '/kerja/api/ops/agents' && req.method === 'PUT') return json(res, 200, OPS.setAgentStatus(b.name, b.active, by, b.reason));
-    const m = /^\/kerja\/api\/ops\/tasks\/(TASK-\d+)(?:\/(subtasks|submit|review|resolve))?$/.exec(p);
+    const m = /^\/kerja\/api\/ops\/tasks\/(TASK-\d+)(?:\/(subtasks|submit|review|revisions|resolve))?$/.exec(p);
     if (m && write) {
       if (!m[2] && req.method === 'PUT') return json(res, 200, OPS.updateTask(m[1], b, by));
       if (m[2] === 'subtasks') return json(res, 200, OPS.upsertSubtask(m[1], b, by));
       if (m[2] === 'submit') return json(res, 200, OPS.submitForReview(m[1], by, b.note));
       if (m[2] === 'review') return json(res, 200, OPS.review(m[1], b, by));
+      if (m[2] === 'revisions') return json(res, 200, OPS.addRevisions(m[1], b, by));
       if (m[2] === 'resolve') return json(res, 200, OPS.resolveRevision(m[1], by, b.note));
     }
     return json(res, 405, { error: 'Metode tidak didukung' });
@@ -242,6 +273,10 @@ async function opsApi(req, res, p) {
 }
 
 async function handle(req, res) {
+  if ((req.url || '').split('?')[0] === '/kerja/api/ops/upload') {
+    if (req.method !== 'POST' || !localHost(req.headers.host) || req.headers['x-kantor'] !== '1') return json(res, 403, { error: 'Unggah gambar hanya dari komputer ini' });
+    try { return json(res, 201, OPS.saveUpload(await readRaw(req, 9 * 1024 * 1024))); } catch (e) { return json(res, 400, { error: e.message.replace('maks 25 MB', 'maks 8 MB') }); }
+  }
   if (!hostAllowed(req.headers.host, extraHosts)) return send(res, 421, { 'Content-Type': 'text/plain; charset=utf-8' }, 'Host tidak dikenal');
   const p0 = (req.url || '').split('?')[0].replace(/\/+$/, '');
   const PAGES = { '/kerja/agen': 'agen.html', '/kerja/report': 'report.html', '/kerja/brand': 'brand.html', '/kerja/ops': 'ops.html' };
