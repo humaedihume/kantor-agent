@@ -1,0 +1,266 @@
+#!/usr/bin/env node
+// Alat HRD Kantor Agent — dipakai Claude (sebagai HRD) saat meeting terjadwal.
+//   node hrd.mjs org                                   struktur organisasi + agent tiap orang
+//   node hrd.mjs todo                                  hal yang perlu ditindaklanjuti HRD sekarang
+//   node hrd.mjs reports [--type T] [--limit N]        daftar report
+//   node hrd.mjs show <id>                             isi report + keputusan CEO
+//   node hrd.mjs new --type T --title "…" --file isi.md [--revises <id>]
+//                                                      buat report baru (status: menunggu keputusan CEO)
+//   node hrd.mjs executed <id>                         tandai rencana harian sudah dibagikan ke karyawan
+//   node hrd.mjs brand [--project DIR]                 isi Brand Kit + bagian yang belum diatur + pertanyaan menunggu
+//   node hrd.mjs brand-ask --bagian "Warna" --pertanyaan "…" --pilihan "A|B|C" [--oleh Nama] [--tugas "…"] [--project DIR]
+//                                                      catat pertanyaan brand kit untuk CEO (dipakai bila tidak bisa bertanya langsung)
+// --- Operasional (Agent Operating Rules) — semua tercatat di http://127.0.0.1:8788/kerja/ops
+//   node hrd.mjs tasks [--status S] [--pic Nama]       daftar task (status, progres, PIC)
+//   node hrd.mjs task <TASK-ID>                        detail task: subtask, review, revisi, riwayat
+//   node hrd.mjs task-new --title "…" --division D [--subdivision S] [--pic Nama] [--priority P2] [--deadline YYYY-MM-DD] [--file brief.md] --by Nama
+//   node hrd.mjs task-clarify <ID> --by Nama --file klarifikasi.json   (understood, assumptions, questions, recommendation) → status CLARIFICATION
+//   node hrd.mjs task-status <ID> --status S --by Nama [--reason "…"]
+//   node hrd.mjs task-sub <ID> --title "…" --agent Nama [--type agent-type] [--deadline D] [--weight 20] [--instruction "…"] --by Nama   delegasi
+//   node hrd.mjs task-progress <ID> --no N --by Nama [--status IN PROGRESS|BLOCKED|DONE] [--progress 50] [--output "path/ringkasan"] [--note "…"]
+//   node hrd.mjs task-submit <ID> --by Nama            serahkan ke Subdivision Review (semua subtask DONE)
+//   node hrd.mjs task-review <ID> --stage sub|div|ceo --result lolos|revisi --by Nama [--note "…"] [--cause "…"] [--subtasks 1,2]
+//   node hrd.mjs task-resolve <ID> --by Nama           revisi selesai → kembali ke Subdivision Review
+//   node hrd.mjs chat --room ROOM --by Nama [--text "…"] [--sticker kopi] [--mood senang] [--reply <id>] [--role "…"]
+//                                                      room: company|ceo|div:<id>|sub:<div>:<sub>|task:TASK-001 · daftar stiker: node hrd.mjs stickers
+//   node hrd.mjs chat-read --room ROOM [--limit 30]
+// --- Antrean kerja (perintah & revisi dari CEO) — WAJIB dipakai agar CEO tahu siapa mengerjakan apa
+//   node hrd.mjs inbox                                 pekerjaan yang BELUM diambil atau macet (perintah baru, poin revisi, lampiran gambar)
+//   node hrd.mjs task-claim <ID> --by Nama [--revs REV-001,REV-002] [--force] [--note "…"]   ambil pekerjaan (status jadi "Dikerjakan")
+//   node hrd.mjs rev-done <ID> --rev REV-001 --by Nama --note "apa yang diubah & di mana hasilnya"   satu poin revisi selesai
+//   node hrd.mjs rev-ask <ID> --rev REV-001 --by Nama --question "…"   tanya CEO per poin revisi (CEO menjawab di dashboard; poin kembali ke antrean dengan jawabannya)
+//   node hrd.mjs task-release <ID> --by Nama [--note "…"]   lepas klaim bila tidak jadi dikerjakan
+// --- Kalender kerja (jadwal posting, campaign, acara, kegiatan) — http://127.0.0.1:8788/kerja/ops#kalender
+//   node hrd.mjs cal-list [--from YYYY-MM-DD] [--to YYYY-MM-DD]   (default: 14 hari ke depan)
+//   node hrd.mjs cal-add --title "…" --date YYYY-MM-DD [--time HH:MM] [--type posting|campaign|acara|meeting|operasional|lainnya] [--platform Instagram|TikTok|Threads|WhatsApp Business|Website]
+//        [--division D] [--owner Nama] [--notes "…"] [--link URL] [--task TASK-001] [--needs-ceo] [--repeat weekly|monthly] --by Nama
+//   node hrd.mjs cal-status <CAL-ID> --status rencana|dikerjakan|menunggu\ izin|siap|selesai|batal --by Nama [--note "…"]   (konten wajib izin CEO: Siap/Selesai hanya CEO)
+// Tipe: harian-pagi | harian-sore | mingguan | bulanan | lainnya
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ORG = await import(new URL('../lib/node/org.mjs', import.meta.url));
+const BRAND = await import(new URL('../lib/node/brand.mjs', import.meta.url));
+const OPS = await import(new URL('../lib/node/ops.mjs', import.meta.url));
+const KAL = await import(new URL('../lib/node/kalender.mjs', import.meta.url));
+const [cmd, ...rest] = process.argv.slice(2);
+const opt = (k) => {
+  const i = rest.indexOf(`--${k}`);
+  return i >= 0 ? rest[i + 1] : undefined;
+};
+const today = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD waktu lokal
+const save = (r) => {
+  fs.mkdirSync(ORG.reportsDir(), { recursive: true });
+  const { type_label, ...clean } = r;
+  fs.writeFileSync(path.join(ORG.reportsDir(), `${r.id}.json`), `${JSON.stringify(clean, null, 2)}\n`, 'utf8');
+};
+function fail(m) { console.error(m); process.exit(1); }
+const by = () => opt('by') || fail('--by <nama Anda> wajib (siapa yang melakukan)');
+const done = (m) => console.log(`${m} — pantau di http://127.0.0.1:8788/kerja/ops`);
+const who = (p) => `${p.name || '(tanpa nama)'}${p.agent ? ` [agent: ${p.agent}]` : ''}`;
+
+try {
+switch (cmd) {
+  case 'org': {
+    const o = ORG.readOrg();
+    console.log(`Perusahaan: ${o.company}\nCEO: ${o.ceo.name}\nHRD: ${who(o.hrd)}\n`);
+    if (!o.divisions.length) console.log('(Belum ada divisi. CEO bisa menambahkannya di http://127.0.0.1:8788/kerja/agen)');
+    for (const d of o.divisions) {
+      console.log(`## Divisi ${d.name}${d.goal ? ` — tujuan: ${d.goal}` : ''}`);
+      console.log(`  Kepala   : ${d.head.name || d.head.agent ? who(d.head) : '(kosong)'}`);
+      for (const m of d.members) console.log(`  Anggota  : ${who(m)}`);
+      for (const f of d.freelancers) console.log(`  Freelance: ${who(f)}`);
+      for (const s of d.subdivisions || []) {
+        console.log(`  ### Sub divisi ${s.name}${s.goal ? ` — tujuan: ${s.goal}` : ''}`);
+        console.log(`    Kepala sub : ${s.head.name || s.head.agent ? who(s.head) : '(kosong)'}`);
+        for (const m of s.members) console.log(`    Anggota    : ${who(m)}`);
+        for (const f of s.freelancers) console.log(`    Freelance  : ${who(f)}`);
+      }
+    }
+    break;
+  }
+  case 'reports': {
+    const t = opt('type');
+    const n = Number(opt('limit') || 15);
+    for (const r of ORG.listReports().filter((x) => !t || x.type === t).slice(0, n)) {
+      console.log(`${r.id}  ${r.type}  ${r.status}${r.executed ? ' (sudah dibagikan)' : ''}  ${r.title}`);
+    }
+    break;
+  }
+  case 'show': {
+    const r = ORG.getReport(rest[0]);
+    if (!r) { console.error('Report tidak ditemukan'); process.exit(1); }
+    console.log(`# ${r.title}\nTipe: ${r.type_label}\nStatus: ${r.status}\nDibuat: ${r.created}`);
+    if (r.revises) console.log(`Revisi dari: ${r.revises}`);
+    if (r.ceo_note) console.log(`Catatan CEO: ${r.ceo_note}`);
+    console.log(`\n${r.content}`);
+    break;
+  }
+  case 'new': {
+    const type = opt('type');
+    if (!ORG.REPORT_TYPES[type]) { console.error(`--type harus salah satu: ${Object.keys(ORG.REPORT_TYPES).join(', ')}`); process.exit(1); }
+    const file = opt('file');
+    const content = file ? fs.readFileSync(file, 'utf8') : '';
+    if (!content.trim()) { console.error('Isi report kosong (--file isi.md)'); process.exit(1); }
+    const stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const r = {
+      id: `${today()}-${type}-${stamp.slice(8)}`.toLowerCase(),
+      type,
+      title: opt('title') || ORG.REPORT_TYPES[type],
+      date: today(),
+      created: new Date().toISOString(),
+      author: ORG.readOrg().hrd.name,
+      revises: opt('revises') || null,
+      status: 'menunggu',
+      content,
+      ceo_note: '',
+      decided: null,
+      executed: false,
+    };
+    save(r);
+    console.log(`Report dibuat: ${r.id} — menunggu keputusan CEO di http://127.0.0.1:8788/kerja/report`);
+    break;
+  }
+  case 'executed': {
+    const r = ORG.getReport(rest[0]);
+    if (!r) { console.error('Report tidak ditemukan'); process.exit(1); }
+    r.executed = new Date().toISOString();
+    save(r);
+    console.log(`Ditandai sudah dibagikan: ${r.id}`);
+    break;
+  }
+  case 'todo': {
+    const all = ORG.listReports();
+    const revised = new Set(all.map((r) => r.revises).filter(Boolean));
+    const out = [];
+    for (const r of all) {
+      if (r.type === 'harian-pagi' && r.date === today() && r.status === 'disetujui' && !r.executed) {
+        out.push(`KERJAKAN: rencana hari ini ${r.id} sudah disetujui CEO tetapi belum dibagikan ke karyawan.`);
+      }
+      if (r.status === 'revisi' && !revised.has(r.id)) out.push(`REVISI: ${r.id} diminta direvisi CEO — catatan: ${r.ceo_note}`);
+    }
+    console.log(out.length ? out.join('\n') : 'Tidak ada yang perlu ditindaklanjuti.');
+    break;
+  }
+  case 'brand': {
+    const proj = opt('project') || process.env.KANTOR_PROJECT || process.cwd();
+    const md = BRAND.readKit(proj);
+    if (!md) { console.log(`Brand Kit belum ada di ${path.join(BRAND.brandDir(proj), 'BRAND-KIT.md')}`); break; }
+    const secs = BRAND.sections(md);
+    console.log(md);
+    console.log('\n=== RINGKASAN ===');
+    console.log(`Sudah diatur : ${secs.filter((x) => x.set).map((x) => x.title).join(', ') || '-'}`);
+    console.log(`BELUM diatur : ${secs.filter((x) => !x.set && x.title !== 'Keputusan Tambahan').map((x) => x.title).join(', ') || '-'}`);
+    console.log(`Aset         : ${BRAND.listAssets(proj).map((a) => a.name).join(', ') || '(belum ada)'} — folder ${path.join(BRAND.brandDir(proj), 'aset')}`);
+    const pend = BRAND.readQuestions(proj).filter((q) => q.status === 'menunggu');
+    if (pend.length) console.log(`Pertanyaan menunggu jawaban CEO: ${pend.map((q) => `[${q.section}] ${q.question}`).join(' | ')}`);
+    break;
+  }
+  case 'brand-ask': {
+    const proj = opt('project') || process.env.KANTOR_PROJECT || process.cwd();
+    const item = BRAND.addQuestion(proj, {
+      section: opt('bagian'), question: opt('pertanyaan'), options: String(opt('pilihan') || '').split('|'), asked_by: opt('oleh'), task: opt('tugas'),
+    });
+    console.log(`Pertanyaan dicatat (${item.id}). CEO menjawab di http://127.0.0.1:8788/kerja/brand — jangan kerjakan bagian yang bergantung pada jawaban ini sebelum dijawab.`);
+    break;
+  }
+  case 'tasks': {
+    const ts = OPS.listTasks().filter((t) => (!opt('status') || t.status === opt('status')) && (!opt('pic') || t.pic === opt('pic') || t.subtasks.some((s) => s.agent === opt('pic'))));
+    for (const t of ts) console.log(`${t.id}  ${t.priority}  ${t.status.padEnd(16)} ${String(t.progress).padStart(3)}%  PIC ${t.pic || '-'}  ${t.deadline || '-'}${t.overdue ? ' TERLAMBAT' : ''}  ${t.title}`);
+    if (!ts.length) console.log('Tidak ada task.');
+    break;
+  }
+  case 'task': {
+    const t = OPS.getTask(rest[0]);
+    if (!t) fail('Task tidak ditemukan');
+    console.log(JSON.stringify(t, null, 2));
+    break;
+  }
+  case 'task-new': {
+    const t = OPS.createTask({ title: opt('title'), division: opt('division'), subdivision: opt('subdivision'), pic: opt('pic'), priority: opt('priority'), deadline: opt('deadline'), description: opt('file') ? fs.readFileSync(opt('file'), 'utf8') : opt('description'), objective: opt('objective'), deliverables: opt('deliverables'), acceptance: opt('acceptance'), requester: opt('requester') }, by());
+    done(`${t.id} dibuat (${t.status})`);
+    break;
+  }
+  case 'task-clarify': {
+    const c = JSON.parse(fs.readFileSync(opt('file'), 'utf8'));
+    OPS.updateTask(rest[0], { clarification: c, status: c.questions ? 'CLARIFICATION' : 'READY TO PLAN', scope: c.scope, deliverables: c.deliverables, objective: c.objective }, by());
+    done(`Klarifikasi ${rest[0]} dicatat${c.questions ? ' — menunggu jawaban CEO' : ''}`);
+    break;
+  }
+  case 'task-status': OPS.updateTask(rest[0], { status: opt('status'), reason: opt('reason') }, by()); done(`${rest[0]} → ${opt('status')}`); break;
+  case 'task-sub': {
+    const t = OPS.upsertSubtask(rest[0], { title: opt('title'), agent: opt('agent'), agent_type: opt('type'), deadline: opt('deadline'), weight: opt('weight'), instruction: opt('instruction') }, by());
+    done(`Subtask #${t.subtasks.at(-1).no} → ${opt('agent')}`);
+    break;
+  }
+  case 'task-progress': {
+    const b = { no: opt('no'), note: opt('note') };
+    if (opt('status')) b.status = opt('status');
+    if (opt('progress')) b.progress = opt('progress');
+    if (opt('output')) b.output = opt('output');
+    OPS.upsertSubtask(rest[0], b, by());
+    done(`Progres ${rest[0]} #${opt('no')} dicatat`);
+    break;
+  }
+  case 'task-submit': OPS.submitForReview(rest[0], by(), opt('note')); done(`${rest[0]} → INTERNAL REVIEW`); break;
+  case 'task-review': {
+    const list = OPS.CHECKLISTS[opt('stage')] || [];
+    const t = OPS.review(rest[0], { stage: opt('stage'), result: opt('result'), note: opt('note'), cause: opt('cause'), correction: opt('correction'), checked: opt('result') === 'lolos' ? list : [], subtasks: String(opt('subtasks') || '').split(',').filter(Boolean) }, by());
+    done(`${rest[0]} → ${t.status}`);
+    break;
+  }
+  case 'task-resolve': OPS.resolveRevision(rest[0], by(), opt('note')); done(`${rest[0]} → INTERNAL REVIEW`); break;
+  case 'chat': {
+    if (opt('sticker') && !OPS.STICKERS[opt('sticker')]) fail(`Stiker: ${Object.keys(OPS.STICKERS).join(', ')}`);
+    if (opt('mood') && !OPS.MOODS[opt('mood')]) fail(`Mood: ${Object.keys(OPS.MOODS).join(', ')}`);
+    const m = OPS.postMessage({ room: opt('room'), from: by(), role: opt('role'), text: opt('text'), task: opt('task'), sticker: opt('sticker'), mood: opt('mood'), reply_to: opt('reply') });
+    done(`Pesan terkirim (id ${m.id})`);
+    break;
+  }
+  case 'chat-read':
+    for (const m of OPS.readRoom(opt('room'), Number(opt('limit') || 30))) {
+      const st = m.sticker ? ` [stiker ${m.sticker}]` : '';
+      const rp = m.reply_to ? ` (membalas ${m.reply_to.from}: "${m.reply_to.text.slice(0, 50)}")` : '';
+      console.log(`[${m.at.slice(0, 16)}] id=${m.id || '-'} ${m.from}${m.mood ? ` ${OPS.MOODS[m.mood]}` : ''}${rp}: ${m.text}${st}`);
+    }
+    break;
+  case 'stickers': console.log(`Stiker: ${Object.entries(OPS.STICKERS).map(([k, [e, c]]) => `${k} ${e} "${c}"`).join(' · ')}\nMood: ${Object.entries(OPS.MOODS).map(([k, e]) => `${k} ${e}`).join(' · ')}`); break;
+  case 'inbox': {
+    const items = OPS.inbox();
+    if (!items.length) { console.log('Antrean kosong: tidak ada perintah baru atau revisi yang menunggu.'); break; }
+    for (const it of items) {
+      console.log(`\n=== ${it.id} [${it.kind.toUpperCase()}] ${it.priority} · ${it.state}${it.state === 'macet' ? ' (klaim lama tanpa kabar: pakai --force)' : ''} · menunggu sejak ${it.since}`);
+      console.log(`Judul    : ${it.title}\nDivisi   : ${it.division}${it.subdivision ? ` / ${it.subdivision}` : ''} · PIC ${it.pic || '-'} · deadline ${it.deadline || '-'}`);
+      if (it.description) console.log(`Perintah : ${it.description}`);
+      if (it.attachments.length) console.log(`Gambar   : (buka dengan Read)\n  ${it.attachments.join('\n  ')}`);
+      if (it.kind === 'revisi') {
+        console.log('Poin revisi dari CEO:');
+        for (const r of it.revisions) console.log(`  ${r.id} · PIC ${r.pic || it.pic}${r.subtask ? ` · subtask #${r.subtask}` : ''}${r.claimed_by ? ` · diklaim ${r.claimed_by}` : ''}\n    Masalah : ${r.problem}${r.cause ? `\n    Penyebab: ${r.cause}` : ''}${r.correction && r.correction !== r.problem ? `\n    Perbaikan: ${r.correction}` : ''}${r.answer ? `\n    JAWABAN CEO atas pertanyaanmu ("${String(r.answer.q).slice(0, 80)}"): ${r.answer.a}` : ''}`);
+      }
+      if (it.subtasks.length) console.log(`Subtask  : ${it.subtasks.map((x) => `#${x.no} ${x.agent}${x.agent_type ? ` (${x.agent_type})` : ''} ${x.status}`).join(' | ')}`);
+    }
+    break;
+  }
+  case 'task-claim': OPS.claimWork(rest[0], { revs: String(opt('revs') || '').split(',').map((x) => x.trim()).filter(Boolean), force: rest.includes('--force'), note: opt('note') }, by()); done(`${rest[0]} diambil oleh ${opt('by')}`); break;
+  case 'rev-done': OPS.completeRevision(rest[0], opt('rev'), by(), opt('note')); done(`${opt('rev')} selesai`); break;
+  case 'rev-ask': OPS.askCeo(rest[0], opt('rev'), by(), opt('question')); done(`${opt('rev')} menunggu jawaban CEO`); break;
+  case 'task-release': OPS.releaseWork(rest[0], by(), opt('note')); done(`Klaim ${rest[0]} dilepas`); break;
+  case 'cal-list': {
+    const from = opt('from') || today();
+    const to = opt('to') || new Date(Date.now() + 14 * 86400e3).toLocaleDateString('sv-SE');
+    const ev = KAL.listRange(from, to);
+    if (!ev.length) console.log(`Tidak ada jadwal ${from} s.d. ${to}.`);
+    for (const e of ev) console.log(`${e.date} ${e.time || '     '} ${(KAL.CAL_TYPES[e.type] || e.type).padEnd(10)} ${String(e.status).padEnd(15)} ${e.id || '(otomatis)'} ${e.title}${e.platform ? ` [${e.platform}]` : ''}${e.owner ? ` · ${e.owner}` : ''}${e.needs_ceo && !e.approved_by ? ' · WAJIB IZIN CEO' : ''}`);
+    break;
+  }
+  case 'cal-add': {
+    const e = KAL.addEvent({ title: opt('title'), date: opt('date'), time: opt('time'), end_time: opt('end-time'), type: opt('type'), platform: opt('platform'), division: opt('division'), owner: opt('owner'), notes: opt('notes'), link: opt('link'), task: opt('task'), needs_ceo: rest.includes('--needs-ceo'), repeat: opt('repeat') }, by());
+    console.log(`Jadwal ${e.id} dibuat (${e.date}${e.time ? ` ${e.time}` : ''}) — lihat http://127.0.0.1:8788/kerja/ops#kalender`);
+    break;
+  }
+  case 'cal-status': { const e = KAL.updateEvent(rest[0], { status: opt('status'), note: opt('note') }, by(), opt('by') === 'CEO'); console.log(`${e.id} → ${e.status}`); break; }
+  default:
+    console.log(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 46).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+}
+} catch (e) { fail(`Gagal: ${e.message}`); }

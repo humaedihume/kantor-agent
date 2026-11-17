@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kelola Agent · Kantor Agent</title>
+<style>
+:root { --bg:#f4f1ea; --card:#fffdf8; --ink:#25221d; --muted:#6f6a62; --line:#e2dccf; --acc:#6a55c9; --danger:#c0392b; --ok:#2f9a6d; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17161a; --card:#211f25; --ink:#ece8f2; --muted:#9b96a3; --line:#34313a; --acc:#9a88ff; --danger:#ff7a6b; --ok:#5fd3a1; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:5; }
+header h1 { font-size:17px; margin:0; flex:1; }
+a { color:var(--acc); }
+main { max-width:1100px; margin:0 auto; padding:16px; }
+.tabs { display:flex; gap:6px; margin-bottom:14px; }
+.tabs button { border:1px solid var(--line); background:var(--card); color:var(--ink); padding:7px 14px; border-radius:8px; cursor:pointer; font:inherit; }
+.tabs button[aria-selected="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; }
+label { display:block; font-size:12px; color:var(--muted); margin:8px 0 3px; }
+input, select, textarea { width:100%; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:7px 9px; }
+textarea { font:13px/1.45 ui-monospace, Consolas, monospace; }
+.btn { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:7px 12px; cursor:pointer; font:inherit; }
+.btn.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+.btn.danger { color:var(--danger); }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.desk h3 { margin:0; font-size:15px; }
+.desk small { color:var(--muted); }
+.list { display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+.item { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+.item .em { font-size:20px; width:26px; text-align:center; flex:none; }
+.item .tx { flex:1; min-width:0; }
+.item .tx b { display:block; }
+.item .tx span { color:var(--muted); font-size:12.5px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.item .tx code { font-size:11.5px; color:var(--muted); }
+.chip { font-size:11px; padding:1px 7px; border-radius:99px; background:var(--bg); border:1px solid var(--line); color:var(--muted); }
+.toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:calc(100% - 32px); }
+.toast.show { opacity:1; }
+dialog { width:min(900px, calc(100% - 24px)); border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); padding:16px; }
+dialog::backdrop { background:rgba(0,0,0,.45); }
+[hidden] { display:none !important; }
+.note { color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kelola Kantor</h1>
+  <nav class="row"><a href="/kerja">Kantor</a><a href="/kerja/ops">Operasional</a><a href="/kerja/brand">Brand Kit</a><a href="/kerja/report">Report HRD</a></nav>
+</header>
+<main>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="org">Struktur Organisasi</button>
+    <button role="tab" aria-selected="false" data-tab="lib">Perpustakaan Agent <span id="libCount" class="chip">0</span></button>
+  </div>
+
+  <section id="tab-org">
+    <div class="card">
+      <p class="note" style="margin-top:0">Struktur: <b>CEO</b> → <b>HRD</b> → <b>Divisi</b> (kepala, anggota, freelance). Tiap orang bisa diberi agent
+      dari Perpustakaan; saat HRD membagikan tugas, agent itulah yang bekerja dan tampil di lantai divisinya. Disimpan di <code id="orgFile"></code>.</p>
+      <div class="grid">
+        <div><label for="company">Nama perusahaan</label><input id="company" maxlength="60"></div>
+        <div><label for="ceo">CEO (kamu)</label><input id="ceo" maxlength="40"></div>
+        <div><label for="hrdName">Nama HRD</label><input id="hrdName" maxlength="40"></div>
+        <div><label for="hrdAgent">Agent HRD (opsional)</label><input id="hrdAgent" list="agentNames" placeholder="mis. HR Onboarding"></div>
+      </div>
+    </div>
+    <div class="row" style="margin:16px 0 8px; justify-content:space-between">
+      <h2 style="margin:0; font-size:16px">Divisi <span class="chip" id="divCount">0</span></h2>
+      <button class="btn" id="addDiv">+ Tambah divisi</button>
+    </div>
+    <div id="divs" class="list"></div>
+    <div class="row" style="margin-top:14px; position:sticky; bottom:12px">
+      <button class="btn primary" id="saveOrg">Simpan struktur organisasi</button>
+      <span class="note" id="dirty"></span>
+    </div>
+  </section>
+
+  <section id="tab-lib" hidden>
+    <div class="row">
+      <input id="q" placeholder="Cari agent…" style="flex:1; min-width:180px">
+      <select id="div" style="width:auto"></select>
+      <button class="btn primary" id="newBtn">+ Tambah agent</button>
+    </div>
+    <p class="note" id="libDir"></p>
+    <div class="list" id="list"></div>
+  </section>
+</main>
+
+<datalist id="agentNames"></datalist>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h2 id="dlgTitle" style="margin:0 0 6px; font-size:16px">Edit agent</h2>
+    <label for="slug">Nama file (tanpa .md)</label>
+    <input id="slug" pattern="[a-z0-9][a-z0-9._-]*" required>
+    <label for="content">Isi agent (frontmatter name &amp; description wajib)</label>
+    <textarea id="content" rows="22" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:12px; justify-content:flex-end">
+      <button class="btn" value="cancel" formnovalidate>Batal</button>
+      <button class="btn primary" id="dlgSave" value="save">Simpan</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const toast = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2600); };
+async function api(url, method = 'GET', body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json', 'X-Kantor': '1' } : { 'X-Kantor': '1' }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Gagal (${r.status})`);
+  return j;
+}
+
+let agents = [];
+let editing = null; // slug yang diedit, null = baru
+
+document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+  $('#tab-org').hidden = b.dataset.tab !== 'org';
+  $('#tab-lib').hidden = b.dataset.tab !== 'lib';
+}));
+
+async function loadAgents() {
+  const j = await api('/kerja/api/agents');
+  agents = j.agents;
+  $('#libCount').textContent = agents.length;
+  $('#libDir').textContent = j.projectDir ? `Agent Kelana (buatan sendiri) otomatis disimpan di ${j.projectDir} dan di-push ke GitHub. Perpustakaan bawaan: ${j.dir}. Dihapus = dipindah ke agents-trash (bisa dipulihkan).` : `Folder: ${j.dir} — dihapus = dipindah ke agents-trash (bisa dipulihkan).`;
+  $('#agentNames').innerHTML = agents.map((a) => `<option value="${esc(a.name)}">${esc(a.slug)}</option>`).join('');
+  const divs = [...new Set(agents.filter((a) => !a.kelana).map((a) => a.division))].sort();
+  const nk = agents.filter((a) => a.kelana).length;
+  const cur = $('#div').value || (window._divInit ? '' : 'kelana'); window._divInit = 1;
+  $('#div').innerHTML = `<option value="">Semua divisi</option><option value="kelana">⭐ Agent Kelana (${nk})</option>` + divs.map((d) => `<option>${esc(d)}</option>`).join('');
+  $('#div').value = cur;
+  renderList();
+}
+
+function renderList() {
+  const q = $('#q').value.trim().toLowerCase();
+  const d = $('#div').value;
+  const rows = agents.filter((a) => (!d || a.division === d) && (!q || `${a.name} ${a.slug} ${a.description}`.toLowerCase().includes(q)));
+  $('#list').innerHTML = rows.slice(0, 400).map((a) => `
+    <div class="item">
+      <div class="em">${esc(a.emoji || '🤖')}</div>
+      <div class="tx"><b>${esc(a.name)} <span class="chip"${a.kelana ? ' style="background:#6a55c9;color:#fff"' : ''}>${a.kelana ? '⭐ Kelana' : esc(a.division)}</span></b><code>${esc(a.slug)}.md</code><span>${esc(a.description)}</span></div>
+      <div class="row">${a.kelana ? '' : `<button class="btn" data-adopt="${esc(a.slug)}" title="Masukkan ke Agent Kelana (ikut GitHub)">+ Kelana</button>`}<button class="btn" data-edit="${esc(a.slug)}">Edit</button><button class="btn danger" data-del="${esc(a.slug)}">Hapus</button></div>
+    </div>`).join('') || '<p class="note">Tidak ada agent yang cocok.</p>';
+}
+$('#q').addEventListener('input', renderList);
+$('#div').addEventListener('change', renderList);
+
+$('#list').addEventListener('click', async (e) => {
+  const ed = e.target.closest('[data-edit]');
+  const del = e.target.closest('[data-del]');
+  const ad = e.target.closest('[data-adopt]');
+  try {
+    if (ad) {
+      await api(`/kerja/api/agents/${encodeURIComponent(ad.dataset.adopt)}?kantor=1`, 'POST');
+      toast('Masuk ke Agent Kelana & di-push ke GitHub'); loadAgents();
+    } else if (ed) {
+      const j = await api(`/kerja/api/agents/${encodeURIComponent(ed.dataset.edit)}`);
+      openDlg(j.slug, j.content);
+    } else if (del) {
+      if (!confirm(`Hapus agent "${del.dataset.del}"? File dipindah ke folder agents-trash.`)) return;
+      await api(`/kerja/api/agents/${encodeURIComponent(del.dataset.del)}`, 'DELETE');
+      toast('Agent dihapus'); loadAgents();
+    }
+  } catch (err) { toast(err.message); }
+});
+
+const TEMPLATE = `---
+name: Nama Agent
+description: Jelaskan kapan agent ini dipakai dan keahliannya
+color: "#6a55c9"
+emoji: 🤖
+---
+
+# Nama Agent
+
+Kamu adalah ...
+
+## Tugas utama
+- ...
+`;
+function openDlg(slug, content) {
+  editing = slug;
+  $('#dlgTitle').textContent = slug ? 'Edit agent' : 'Tambah agent baru';
+  $('#slug').value = slug || '';
+  $('#slug').readOnly = !!slug;
+  $('#content').value = content;
+  $('#dlg').showModal();
+}
+$('#newBtn').addEventListener('click', () => openDlg(null, TEMPLATE));
+$('#dlgForm').addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'save') return;
+  e.preventDefault();
+  try {
+    if (editing) await api(`/kerja/api/agents/${encodeURIComponent(editing)}`, 'PUT', { content: $('#content').value });
+    else await api('/kerja/api/agents', 'POST', { slug: $('#slug').value.trim(), content: $('#content').value });
+    $('#dlg').close(); toast('Agent disimpan'); loadAgents();
+  } catch (err) { toast(err.message); }
+});
+
+// ---- struktur organisasi
+const PALETTE = ['#3f6fd1', '#2f9a6d', '#d9772f', '#c2417a', '#0f8fa3', '#8a4fa8', '#9a7418', '#b8452f'];
+let org = { divisions: [] };
+const ROLES = { members: 'Anggota', freelancers: 'Freelance' };
+const markDirty = () => { $('#dirty').textContent = 'Ada perubahan yang belum disimpan'; };
+
+// g = "di" (divisi) atau "di.si" (sub divisi)
+const grp = (g) => { const [di, si] = String(g).split('.'); const d = org.divisions[di]; return si === undefined ? d : d.subdivisions[si]; };
+function personRow(g, key, pi, p) {
+  return `<div class="row" style="margin-top:6px">
+    <input data-p="${g}|${key}|${pi}|name" value="${esc(p.name)}" placeholder="Nama" maxlength="40" style="flex:1; min-width:120px">
+    <input data-p="${g}|${key}|${pi}|agent" value="${esc(p.agent)}" list="agentNames" placeholder="Agent" style="flex:1.4; min-width:160px">
+    ${key === 'head' ? '<span style="width:38px"></span>' : `<button class="btn danger" data-rm="${g}|${key}|${pi}" title="Hapus">✕</button>`}</div>`;
+}
+function peopleBlock(g, o, headLabel) {
+  return `<label>${headLabel}</label>${personRow(g, 'head', 0, o.head)}
+    ${Object.entries(ROLES).map(([key, label]) => `
+      <label>${label} <span class="chip">${o[key].length}</span></label>
+      ${o[key].map((p, pi) => personRow(g, key, pi, p)).join('')}
+      <button class="btn" data-add="${g}|${key}" style="margin-top:6px">+ ${label}</button>`).join('')}`;
+}
+function subBlock(di, s, si) {
+  const g = `${di}.${si}`;
+  return `<div class="card" style="margin-top:10px; background:var(--bg)">
+    <div class="row">
+      <b style="flex:none">Sub divisi</b>
+      <input data-d="${g}|name" value="${esc(s.name)}" placeholder="Nama sub divisi" maxlength="50" style="flex:1; min-width:150px; font-weight:600">
+      <button class="btn danger" data-rmsub="${g}">Hapus sub divisi</button>
+    </div>
+    <label>Tujuan / fokus sub divisi</label>
+    <input data-d="${g}|goal" value="${esc(s.goal)}" maxlength="300" placeholder="mis. Konten video TikTok & Reels">
+    ${peopleBlock(g, s, 'Kepala sub divisi')}
+  </div>`;
+}
+function renderOrg() {
+  $('#divCount').textContent = org.divisions.length;
+  $('#divs').innerHTML = org.divisions.map((d, di) => `
+    <div class="card" style="border-left:5px solid ${esc(d.color)}">
+      <div class="row">
+        <b style="flex:none">Lantai ${di + 2}</b>
+        <input data-d="${di}|name" value="${esc(d.name)}" placeholder="Nama divisi" maxlength="50" style="flex:1; min-width:160px; font-weight:600">
+        <input data-d="${di}|color" type="color" value="${esc(d.color)}" style="width:46px; padding:2px" title="Warna divisi">
+        <button class="btn" data-mv="${di}|-1" title="Naik" ${di === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn" data-mv="${di}|1" title="Turun" ${di === org.divisions.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn danger" data-rmdiv="${di}">Hapus divisi</button>
+      </div>
+      <label>Tujuan / fokus divisi</label>
+      <input data-d="${di}|goal" value="${esc(d.goal)}" maxlength="300" placeholder="mis. Menambah booking event lewat Instagram & TikTok">
+      ${peopleBlock(di, d, 'Kepala divisi')}
+      <label style="margin-top:14px">Sub divisi <span class="chip">${d.subdivisions.length}</span></label>
+      ${d.subdivisions.map((s, si) => subBlock(di, s, si)).join('')}
+      <button class="btn" data-addsub="${di}" style="margin-top:8px">+ Sub divisi</button>
+    </div>`).join('') || '<p class="note">Belum ada divisi. Klik “+ Tambah divisi”. Lantai 1 kantor selalu untuk Direksi &amp; HRD; tiap divisi mendapat lantai sendiri.</p>';
+}
+$('#divs').addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.dataset.d) { const [g, f] = t.dataset.d.split('|'); grp(g)[f] = t.value; }
+  if (t.dataset.p) {
+    const [g, key, pi, f] = t.dataset.p.split('|');
+    const o = grp(g);
+    (key === 'head' ? o.head : o[key][pi])[f] = t.value;
+  }
+  markDirty();
+});
+$('#divs').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const ds = b.dataset;
+  if (ds.add) { const [g, key] = ds.add.split('|'); grp(g)[key].push({ name: '', agent: '' }); }
+  else if (ds.rm) { const [g, key, pi] = ds.rm.split('|'); grp(g)[key].splice(pi, 1); }
+  else if (ds.addsub) { const d = org.divisions[ds.addsub]; d.subdivisions.push({ name: `Sub divisi ${d.subdivisions.length + 1}`, goal: '', head: { name: '', agent: '' }, members: [], freelancers: [] }); }
+  else if (ds.rmsub) { const [di, si] = ds.rmsub.split('.'); const s = org.divisions[di].subdivisions; if (!confirm(`Hapus sub divisi "${s[si].name}" beserta semua orangnya?`)) return; s.splice(si, 1); }
+  else if (ds.mv) { const [di, dir] = ds.mv.split('|').map(Number); const a = org.divisions; [a[di], a[di + dir]] = [a[di + dir], a[di]]; }
+  else if (ds.rmdiv) { if (!confirm(`Hapus divisi "${org.divisions[ds.rmdiv].name}" beserta semua orangnya?`)) return; org.divisions.splice(ds.rmdiv, 1); }
+  else return;
+  markDirty(); renderOrg();
+});
+$('#addDiv').addEventListener('click', () => {
+  org.divisions.push({ name: `Divisi ${org.divisions.length + 1}`, color: PALETTE[org.divisions.length % PALETTE.length], goal: '', head: { name: '', agent: '' }, members: [], freelancers: [], subdivisions: [] });
+  markDirty(); renderOrg();
+  $('#divs').lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+['company', 'ceo', 'hrdName', 'hrdAgent'].forEach((id) => $(`#${id}`).addEventListener('input', markDirty));
+
+async function loadOrg() {
+  const o = await api('/kerja/api/org');
+  org = o;
+  $('#orgFile').textContent = o.file;
+  $('#company').value = o.company;
+  $('#ceo').value = o.ceo.name;
+  $('#hrdName').value = o.hrd.name;
+  $('#hrdAgent').value = o.hrd.agent;
+  $('#dirty').textContent = '';
+  renderOrg();
+}
+$('#saveOrg').addEventListener('click', async () => {
+  const body = { company: $('#company').value, ceo: { name: $('#ceo').value }, hrd: { name: $('#hrdName').value, agent: $('#hrdAgent').value }, divisions: org.divisions };
+  const agentsOf = (o) => [o.head.agent, ...o.members.map((m) => m.agent), ...o.freelancers.map((m) => m.agent)];
+  const used = [body.hrd.agent, ...org.divisions.flatMap((d) => [...agentsOf(d), ...d.subdivisions.flatMap(agentsOf)])].filter(Boolean);
+  const unknown = [...new Set(used.filter((a) => !agents.some((x) => x.name.toLowerCase() === a.toLowerCase())))];
+  if (unknown.length && !confirm(`Agent ini belum ada di Perpustakaan: ${unknown.join(', ')}. Tetap simpan?`)) return;
+  try { await api('/kerja/api/org', 'PUT', body); toast('Struktur organisasi disimpan'); loadOrg(); } catch (err) { toast(err.message); }
+});
+addEventListener('beforeunload', (e) => { if ($('#dirty').textContent) e.preventDefault(); });
+
+loadAgents().catch((e) => toast(e.message));
+loadOrg().catch((e) => toast(e.message));
+</script>
+</body>
+</html>

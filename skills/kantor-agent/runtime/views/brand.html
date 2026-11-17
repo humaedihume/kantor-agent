@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brand Kit · Kantor Agent</title>
+<style>
+:root { --bg:#f4f1ea; --card:#fffdf8; --ink:#25221d; --muted:#6f6a62; --line:#e2dccf; --acc:#6a55c9; --danger:#c0392b; --ok:#2f9a6d; --warn:#b7791f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#17161a; --card:#211f25; --ink:#ece8f2; --muted:#9b96a3; --line:#34313a; --acc:#9a88ff; --danger:#ff7a6b; --ok:#5fd3a1; --warn:#f0b44c; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:5; }
+header h1 { font-size:17px; margin:0; flex:1; }
+nav { display:flex; gap:12px; flex-wrap:wrap; }
+a { color:var(--acc); }
+main { max-width:1200px; margin:0 auto; padding:16px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; min-width:0; }
+.grid2 { display:grid; grid-template-columns:260px 1fr; gap:16px; align-items:start; }
+@media (max-width: 820px) { .grid2 { grid-template-columns:1fr; } }
+.rule { border-left:4px solid var(--acc); }
+.muted { color:var(--muted); }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.btn { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:8px; padding:7px 12px; cursor:pointer; font:inherit; }
+.btn.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+.btn.danger { color:var(--danger); }
+.btn.opt { text-align:left; }
+.btn.opt:hover { border-color:var(--acc); }
+.sec { display:flex; gap:8px; align-items:center; padding:6px 4px; border-bottom:1px solid var(--line); cursor:pointer; color:var(--ink); text-decoration:none; }
+.sec:last-child { border-bottom:0; }
+.sec i { width:9px; height:9px; border-radius:50%; flex:none; background:var(--warn); }
+.sec i.ok { background:var(--ok); }
+.tabs { display:flex; gap:6px; margin-bottom:12px; }
+.tabs button { border:1px solid var(--line); background:var(--card); color:var(--ink); padding:7px 14px; border-radius:8px; cursor:pointer; font:inherit; }
+.tabs button[aria-selected="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
+.doc { overflow-wrap:anywhere; }
+.doc h1 { font-size:20px; margin-top:0; } .doc h2 { font-size:17px; margin-top:24px; padding-top:10px; border-top:1px solid var(--line); scroll-margin-top:80px; } .doc h3 { font-size:15px; }
+.doc table { border-collapse:collapse; width:100%; display:block; overflow-x:auto; }
+.doc th, .doc td { border:1px solid var(--line); padding:5px 8px; text-align:left; }
+.doc code { background:var(--bg); padding:1px 4px; border-radius:4px; }
+.doc .unset { color:var(--warn); font-style:italic; }
+.swatch { display:inline-block; width:14px; height:14px; border-radius:3px; border:1px solid var(--line); vertical-align:-2px; margin-right:3px; }
+textarea { width:100%; font:13px/1.5 ui-monospace, Consolas, monospace; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; }
+input[type=text] { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:7px 9px; flex:1; min-width:160px; }
+.q { margin-top:10px; }
+.q .opts { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:6px; margin:8px 0; }
+.assets { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px; }
+.asset { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--card); display:flex; flex-direction:column; }
+.asset .pv { height:120px; display:grid; place-items:center; background:repeating-conic-gradient(#8881 0 25%, transparent 0 50%) 0 0/16px 16px; }
+.asset .pv img { max-width:100%; max-height:120px; object-fit:contain; }
+.asset .pv b { font-size:22px; color:var(--muted); }
+.asset .meta { padding:8px; font-size:12.5px; }
+.asset .meta b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.drop { border:2px dashed var(--line); border-radius:12px; padding:18px; text-align:center; margin-bottom:12px; }
+.drop.over { border-color:var(--acc); background:color-mix(in srgb, var(--acc) 8%, transparent); }
+.bsec { border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:12px; scroll-margin-top:80px; }
+.bsec.unset { border-style:dashed; }
+.bsec h2 { margin:0; font-size:16px; border:0; padding:0; }
+.bsec .hint { font-size:12.5px; color:var(--muted); margin:6px 0; }
+.bsec textarea { font:14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.chip2 { font-size:11.5px; padding:1px 8px; border-radius:99px; border:1px solid currentColor; }
+.chip2.ok { color:var(--ok); } .chip2.no { color:var(--warn); }
+.colorrow { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+.colorrow input[type=color] { width:44px; height:34px; padding:2px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+.badge { background:var(--danger); color:#fff; border-radius:99px; padding:0 7px; font-size:12px; }
+.toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:8px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:calc(100% - 32px); }
+.toast.show { opacity:1; }
+[hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Brand Kit <span class="muted" id="company" style="font-weight:400"></span></h1>
+  <nav><a href="/kerja">Kantor</a><a href="/kerja/ops">Operasional</a><a href="/kerja/report">Report HRD</a><a href="/kerja/agen">Kelola</a></nav>
+</header>
+<main>
+  <div class="card rule" style="margin-bottom:16px">
+    <b>Aturan wajib untuk semua agent</b>
+    <p class="muted" style="margin:4px 0 0">Setiap agent — lama maupun baru — wajib mengikuti Brand Kit ini dan tidak boleh keluar dari aturannya.
+    Bila yang dibutuhkan belum ada di Brand Kit, Claude bertanya dulu kepada CEO dengan pilihan jawaban sebelum mengerjakan tugas;
+    jawabanmu otomatis menjadi aturan baru di bagian “Keputusan Tambahan”. Folder: <code id="dir"></code></p>
+  </div>
+
+  <section class="card" id="qbox" hidden style="margin-bottom:16px; border-color:var(--warn)">
+    <h2 style="margin:0; font-size:16px">Pertanyaan brand kit menunggu jawabanmu <span class="badge" id="qcount"></span></h2>
+    <div id="qlist"></div>
+  </section>
+
+  <div class="grid2">
+    <aside class="card">
+      <b>Kelengkapan</b> <span class="muted" id="progress"></span>
+      <div id="secs" style="margin-top:8px"></div>
+    </aside>
+    <section>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="doc">Pedoman</button>
+        <button role="tab" aria-selected="false" data-tab="aset">Aset <span id="acount"></span></button>
+        <button role="tab" aria-selected="false" data-tab="riwayat">Riwayat pertanyaan</button>
+      </div>
+      <div id="tab-doc" class="card">
+        <div class="row" style="justify-content:space-between">
+          <span class="muted">Klik <b>Isi bagian ini</b> lalu ketik seperti biasa, atau lampirkan file (Word, TXT, CSV dibaca otomatis; PDF &amp; gambar dibaca langsung oleh agent).</span>
+          <button class="btn" id="editBtn" title="Untuk pengguna mahir">Edit lanjutan (Markdown)</button>
+        </div>
+        <div id="view" class="doc"></div>
+        <div id="editor" hidden>
+          <p class="muted" style="margin-top:0">Tulis dalam Markdown. Tiap bagian diawali <code>## Judul</code>. Hapus tulisan <code>_(belum diatur)_</code> saat mengisi.</p>
+          <textarea id="src" rows="28" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:10px; justify-content:flex-end"><button class="btn" id="cancelEdit">Batal</button><button class="btn primary" id="saveDoc">Simpan pedoman</button></div>
+        </div>
+      </div>
+      <div id="tab-aset" class="card" hidden>
+        <label class="drop" id="drop">
+          <b>Tarik file ke sini</b> atau klik untuk memilih — logo, font, foto, template, panduan PDF (maks 25 MB per file)
+          <input type="file" id="file" multiple hidden>
+        </label>
+        <div class="assets" id="assets"></div>
+      </div>
+      <div id="tab-riwayat" class="card" hidden><div id="hist"></div></div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const toast = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
+async function api(url, method = 'GET', body, raw) {
+  const headers = { 'X-Kantor': '1' };
+  if (body !== undefined && !raw) headers['Content-Type'] = 'application/json';
+  if (raw) headers['Content-Type'] = 'application/octet-stream';
+  const r = await fetch(url, { method, headers, body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Gagal (${r.status})`);
+  return j;
+}
+const slug = (s) => 'b-' + s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+function md(src) {
+  const inl = (s) => esc(s)
+    .replace(/`aset\/([^`]+)`/g, (_, n) => `<a href="/kerja/brand/aset/${encodeURIComponent(n)}" target="_blank" rel="noopener">📎 ${n}</a>`)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/(^|\W)_\(belum diatur\)_(?=\W|$)/g, '$1<span class="unset">(belum diatur)</span>')
+    .replace(/(^|\W)\*([^*]+)\*(?=\W|$)/g, '$1<i>$2</i>')
+    .replace(/(^|\W)_([^_]+)_(?=\W|$)/g, '$1<i>$2</i>')
+    .replace(/#([0-9a-fA-F]{6})\b/g, '<span class="swatch" style="background:#$1"></span>#$1');
+  const out = [];
+  const lines = String(src).replace(/\r/g, '').replace(/<!--[\s\S]*?-->/g, '').split('\n');
+  let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    let m;
+    if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')) {
+      close();
+      const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      out.push('<table><thead><tr>' + cells(l).map((c) => `<th>${inl(c)}</th>`).join('') + '</tr></thead><tbody>');
+      i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { out.push('<tr>' + cells(lines[i]).map((c) => `<td>${inl(c)}</td>`).join('') + '</tr>'); i++; }
+      i--; out.push('</tbody></table>');
+    } else if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { close(); out.push(`<h${m[1].length}${m[1].length === 2 ? ` id="${slug(m[2])}"` : ''}>${inl(m[2])}</h${m[1].length}>`); }
+    else if ((m = /^\s*[-*]\s+(.*)$/.exec(l))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inl(m[1])}</li>`); }
+    else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(l))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inl(m[1])}</li>`); }
+    else if (l.trim() === '') close();
+    else { close(); out.push(`<p>${inl(l)}</p>`); }
+  }
+  close();
+  return out.join('\n');
+}
+
+let data = null;
+async function load() {
+  data = await api('/kerja/api/brand');
+  $('#dir').textContent = data.dir;
+  if (!editing) renderSections();
+  const secs = data.sections.filter((s) => s.title !== 'Keputusan Tambahan');
+  const done = secs.filter((s) => s.set).length;
+  $('#progress').textContent = `${done}/${secs.length} bagian diatur`;
+  $('#secs').innerHTML = data.sections.map((s) => `<a class="sec" href="#${slug(s.title)}" data-sec="${esc(s.title)}"><i class="${s.set ? 'ok' : ''}"></i><span>${esc(s.title)}</span></a>`).join('');
+  $('#acount').textContent = data.assets.length ? `(${data.assets.length})` : '';
+  renderAssets();
+  renderQuestions();
+}
+// ---- tampilan per bagian + form isi teks biasa
+let editing = null; // judul bagian yang sedang diisi
+function parseKit(src) {
+  const parts = String(src || '').replace(/\r/g, '').split(/^## /m);
+  return {
+    intro: parts[0],
+    sections: parts.slice(1).map((p) => {
+      const [title, ...rest] = p.split('\n');
+      const raw = rest.join('\n');
+      const hint = (raw.match(/<!--\s*([\s\S]*?)\s*-->/) || [])[1] || '';
+      const body = raw.replace(/<!--[\s\S]*?-->/g, '').trim();
+      return { title: title.trim(), hint, body, unset: body === '' || body === '_(belum diatur)_' };
+    }),
+  };
+}
+function renderSections() {
+  const k = parseKit(data.content);
+  $('#view').innerHTML = md(k.intro) + k.sections.map((s, i) => {
+    const auto = s.title === 'Keputusan Tambahan';
+    return `<section class="bsec ${s.unset && !auto ? 'unset' : ''}" id="${slug(s.title)}">
+      <div class="row" style="justify-content:space-between">
+        <h2>${esc(s.title)}</h2>
+        ${auto ? '<span class="muted" style="font-size:12.5px">terisi otomatis dari jawaban pertanyaan</span>'
+          : `<span class="row"><span class="chip2 ${s.unset ? 'no' : 'ok'}">${s.unset ? 'belum diatur' : 'sudah diatur'}</span><button class="btn ${s.unset ? 'primary' : ''}" data-edit="${i}">${s.unset ? 'Isi bagian ini' : 'Ubah'}</button></span>`}
+      </div>
+      <div data-body="${i}">${s.unset ? (auto ? '<p class="muted">Belum ada keputusan.</p>' : `<p class="hint">${esc(s.hint)}</p>`) : md(s.body)}</div>
+    </section>`;
+  }).join('');
+}
+function openEditor(i) {
+  const s = parseKit(data.content).sections[i];
+  editing = s.title;
+  const box = document.querySelector(`[data-body="${i}"]`);
+  const isColor = /warna/i.test(s.title);
+  box.innerHTML = `
+    <p class="hint">Yang perlu diisi: ${esc(s.hint || 'tulis aturannya dengan kalimat biasa.')} Cukup ketik seperti biasa — tidak perlu format khusus. Satu aturan per baris akan tampil rapi.</p>
+    ${isColor ? `<div class="colorrow"><input type="text" id="cName" placeholder="Nama warna, mis. Ungu Kelana" style="flex:1"><input type="color" id="cHex" value="#6a55c9"><input type="text" id="cUse" placeholder="Dipakai untuk… (mis. tombol & judul)" style="flex:1.4"><button class="btn" id="cAdd" type="button">+ Tambah warna</button></div>` : ''}
+    <textarea id="secText" rows="10" placeholder="Ketik di sini…">${esc(s.unset ? '' : s.body)}</textarea>
+    <div class="row" style="margin-top:8px; justify-content:space-between">
+      <label class="btn">📎 Lampirkan file<input type="file" id="secFile" multiple hidden></label>
+      <span class="row"><span class="muted" id="secMsg"></span><button class="btn" id="secCancel" type="button">Batal</button><button class="btn primary" id="secSave" type="button">Simpan bagian</button></span>
+    </div>`;
+  const ta = $('#secText');
+  ta.focus();
+  const append = (t) => { ta.value = `${ta.value.trimEnd()}${ta.value.trim() ? '\n' : ''}${t}`; };
+  if (isColor) $('#cAdd').addEventListener('click', () => {
+    const n = $('#cName').value.trim() || 'Warna';
+    const use = $('#cUse').value.trim();
+    append(`- ${n}: ${$('#cHex').value.toUpperCase()}${use ? ` — ${use}` : ''}`);
+    $('#cName').value = ''; $('#cUse').value = '';
+  });
+  $('#secFile').addEventListener('change', async (e) => {
+    for (const f of e.target.files) {
+      const name = f.name.replace(/[^A-Za-z0-9 ._()-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '');
+      $('#secMsg').textContent = `Memproses ${name}…`;
+      try {
+        const buf = await f.arrayBuffer();
+        await api(`/kerja/api/brand/aset/${encodeURIComponent(name)}`, 'PUT', buf, true);
+        const r = await fetch('/kerja/api/brand/baca', { method: 'POST', headers: { 'X-Kantor': '1', 'Content-Type': 'application/octet-stream', 'X-Nama-File': encodeURIComponent(name) }, body: buf }).then((x) => x.json());
+        if (r.text) append(r.text.trim());
+        append(`Lampiran: \`aset/${name}\``);
+        $('#secMsg').textContent = r.text ? `Isi ${name} sudah dimasukkan — periksa lalu simpan` : `${name} dilampirkan (dibaca langsung oleh agent)`;
+      } catch (err) { $('#secMsg').textContent = `${name}: ${err.message}`; }
+    }
+    e.target.value = '';
+  });
+  $('#secCancel').addEventListener('click', () => { editing = null; renderSections(); });
+  $('#secSave').addEventListener('click', async () => {
+    try { await api('/kerja/api/brand/bagian', 'PUT', { title: s.title, text: ta.value }); editing = null; toast(`"${s.title}" disimpan — semua agent langsung memakainya`); load(); }
+    catch (err) { toast(err.message); }
+  });
+}
+$('#view').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-edit]');
+  if (!b) return;
+  if (editing && !confirm('Bagian lain sedang diisi dan belum disimpan. Tinggalkan?')) return;
+  editing = null;
+  renderSections();
+  openEditor(Number(b.dataset.edit));
+  document.getElementById(slug(parseKit(data.content).sections[b.dataset.edit].title))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+function showTab(t) {
+  document.querySelectorAll('[data-tab]').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === t)));
+  ['doc', 'aset', 'riwayat'].forEach((k) => { $(`#tab-${k}`).hidden = k !== t; });
+}
+$('#secs').addEventListener('click', () => showTab('doc'));
+
+// ---- pedoman
+$('#editBtn').addEventListener('click', () => { $('#src').value = data.content; $('#view').hidden = true; $('#editor').hidden = false; $('#editBtn').hidden = true; });
+$('#cancelEdit').addEventListener('click', () => { $('#view').hidden = false; $('#editor').hidden = true; $('#editBtn').hidden = false; });
+$('#saveDoc').addEventListener('click', async () => {
+  try { await api('/kerja/api/brand', 'PUT', { content: $('#src').value }); toast('Pedoman disimpan — semua agent memakai versi ini'); $('#cancelEdit').click(); load(); }
+  catch (e) { toast(e.message); }
+});
+
+// ---- aset
+const fmtSize = (n) => n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+function renderAssets() {
+  $('#assets').innerHTML = data.assets.map((a) => {
+    const url = `/kerja/brand/aset/${encodeURIComponent(a.name)}`;
+    const pv = a.type.startsWith('image/') ? `<img src="${url}?t=${encodeURIComponent(a.updated)}" alt="${esc(a.name)}" loading="lazy">` : `<b>${esc(a.name.split('.').pop().toUpperCase())}</b>`;
+    return `<div class="asset"><a class="pv" href="${url}" target="_blank" rel="noopener">${pv}</a>
+      <div class="meta"><b title="${esc(a.name)}">${esc(a.name)}</b><span class="muted">${fmtSize(a.size)}</span>
+      <div class="row" style="margin-top:6px"><button class="btn danger" data-del="${esc(a.name)}">Hapus</button></div></div></div>`;
+  }).join('') || '<p class="muted">Belum ada aset. Unggah logo, font, contoh foto, dan template di atas.</p>';
+}
+async function upload(files) {
+  for (const f of files) {
+    const name = f.name.replace(/[^A-Za-z0-9 ._()-]+/g, '-').replace(/^[^A-Za-z0-9]+/, '');
+    if (data.assets.some((a) => a.name === name) && !confirm(`"${name}" sudah ada. Timpa?`)) continue;
+    try { await api(`/kerja/api/brand/aset/${encodeURIComponent(name)}`, 'PUT', await f.arrayBuffer(), true); toast(`Terunggah: ${name}`); }
+    catch (e) { toast(`${name}: ${e.message}`); }
+  }
+  load();
+}
+$('#file').addEventListener('change', (e) => { upload([...e.target.files]); e.target.value = ''; });
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => upload([...e.dataTransfer.files]));
+$('#assets').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-del]');
+  if (!b || !confirm(`Hapus aset "${b.dataset.del}"? File dipindah ke brand-kit/aset-terhapus.`)) return;
+  try { await api(`/kerja/api/brand/aset/${encodeURIComponent(b.dataset.del)}`, 'DELETE'); toast('Aset dihapus'); load(); } catch (err) { toast(err.message); }
+});
+
+// ---- pertanyaan
+function renderQuestions() {
+  const pend = data.questions.filter((q) => q.status === 'menunggu');
+  $('#qbox').hidden = !pend.length;
+  $('#qcount').textContent = pend.length;
+  $('#qlist').innerHTML = pend.map((q) => `
+    <div class="q card" style="background:var(--bg)">
+      <div class="muted" style="font-size:12.5px">Bagian: <b>${esc(q.section)}</b>${q.asked_by ? ` · ditanyakan oleh ${esc(q.asked_by)}` : ''}${q.task ? ` · untuk tugas: ${esc(q.task)}` : ''}</div>
+      <b>${esc(q.question)}</b>
+      <div class="opts">${q.options.map((o) => `<button class="btn opt" data-q="${esc(q.id)}" data-a="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+      <div class="row"><input type="text" id="c-${esc(q.id)}" placeholder="Atau tulis jawaban sendiri…"><button class="btn primary" data-q="${esc(q.id)}" data-custom="1">Kirim</button></div>
+    </div>`).join('');
+  const done = data.questions.filter((q) => q.status === 'dijawab').reverse();
+  $('#hist').innerHTML = done.map((q) => `<p><span class="muted">${new Date(q.answered).toLocaleString('id-ID')} · ${esc(q.section)}</span><br>${esc(q.question)} → <b>${esc(q.answer)}</b></p>`).join('') || '<p class="muted">Belum ada pertanyaan yang dijawab.</p>';
+}
+$('#qlist').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-q]');
+  if (!b) return;
+  const answer = b.dataset.custom ? $(`#c-${b.dataset.q}`).value : b.dataset.a;
+  try { await api(`/kerja/api/brand/pertanyaan/${b.dataset.q}`, 'PUT', { answer }); toast('Jawaban disimpan ke Brand Kit sebagai aturan baru'); load(); }
+  catch (err) { toast(err.message); }
+});
+
+fetch('/kerja/api/org').then((r) => r.json()).then((o) => { $('#company').textContent = `· ${o.company}`; }).catch(() => {});
+load().catch((e) => toast(e.message));
+setInterval(() => { if ($('#editor').hidden && !editing) load().catch(() => {}); }, 30000);
+</script>
+</body>
+</html>

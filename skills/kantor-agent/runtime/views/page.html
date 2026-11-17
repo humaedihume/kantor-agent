@@ -128,9 +128,14 @@ button { font: inherit; color: inherit; }
 .card .act { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card.more { cursor: default; --c: #8a8378; }
 .card.more:hover { transform: none; }
+.cards.compact { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 176px; overflow-x: auto; overflow-y: hidden; padding: 4px 2px 8px; gap: 8px; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: rgba(60,45,25,.3) transparent; }
+.cards.compact::-webkit-scrollbar { height: 6px; }
+.cards.compact::-webkit-scrollbar-thumb { background: rgba(60,45,25,.28); border-radius: 3px; }
+.cards.compact .card { scroll-snap-align: start; }
+.cards.compact .card .nm { font-size: 12.5px; }
+.cards.compact .card .role { display: inline; font-size: 10.5px; }
 .cards.compact .card { padding: 8px 9px 9px; grid-template-columns: 30px minmax(0, 1fr); gap: 2px 8px; }
 .cards.compact .card .ava { width: 30px; height: 30px; font-size: 12.5px; }
-.cards.compact .card .role { display: none; }
 .cards.compact .card.fl .role { display: inline; }
 .cards.compact .card .st { margin-left: 0; font-size: 10px; padding: 1px 6px; }
 
@@ -178,6 +183,10 @@ body.lapang .cards { opacity: .92; }
   .bubble { max-width: 150px; font-size: 10.5px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.floorpick { display:flex; gap:8px; align-items:center; white-space:nowrap; }
+.floorpick select { font:600 12px/1.2 var(--sans); max-width:190px; padding:3px 4px; border-radius:6px; border:1px solid var(--line); background:transparent; color:inherit; }
+.floorpick select option { color:#25221d; }
+#repPend:not(:empty) { margin-left:4px; background:#c0392b; color:#fff; border-radius:99px; padding:0 6px; font-size:11px; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -201,6 +210,8 @@ body.lapang .cards { opacity: .92; }
     <div class="stat"><small>Status</small><span class="live"><i class="dot" id="liveDot"></i><span id="liveTxt">Menghubungkan…</span></span></div>
     <div class="stat"><small>Subagent hari ini</small><b id="sToday">–</b></div>
     <div class="stat"><small>Aktif sekarang</small><b id="sActive">–</b></div>
+    <div class="stat"><small>Lantai</small><span class="floorpick"><select id="floorSel" aria-label="Pilih lantai"></select><a href="/kerja/agen" title="Tambah lantai = tambah divisi">+ Lantai</a></span></div>
+    <div class="stat"><small>Kantor</small><span><a href="/kerja/ops">Operasional</a> · <a href="/kerja/report">Report<b id="repPend"></b></a> · <a href="/kerja/brand">Brand Kit</a> · <a href="/kerja/agen">Kelola</a></span></div>
     <div class="stat" id="pubStat" hidden><small>URL publik</small><a id="pubLink" href="#" target="_blank" rel="noopener noreferrer">buka</a></div>
   </div>
   <button class="toggle card-ui" id="togglePanel" type="button" title="Tombol pintas: H">Lihat kantor penuh</button>
@@ -229,6 +240,26 @@ body.lapang .cards { opacity: .92; }
 <div class="cards" id="cards" aria-label="Karakter"></div>
 
 {{CONFIG_SCRIPT}}
-<script type="module" src="/kerja/assets/kantor.js?v=100"></script>
+<script>
+// pilih lantai: tiap divisi = satu lantai dengan kantor yang sama; PageUp/PageDown untuk naik/turun
+(function () {
+  var K = window.KANTOR || {}, floors = K.floors || [{ n: 1, title: 'Direksi & HRD' }], cur = K.floor || 1;
+  var sel = document.getElementById('floorSel');
+  floors.forEach(function (f) { var o = document.createElement('option'); o.value = f.n; o.textContent = 'Lantai ' + f.n + ' · ' + f.title; sel.appendChild(o); });
+  sel.value = String(cur);
+  var go = function (n) { location.href = '/kerja' + (n > 1 ? '?lantai=' + n : ''); };
+  sel.addEventListener('change', function () { go(Number(sel.value)); });
+  addEventListener('keydown', function (e) {
+    if (e.target.closest && e.target.closest('input,textarea,select')) return;
+    if (e.key === 'PageUp' && cur < floors.length) go(cur + 1);
+    if (e.key === 'PageDown' && cur > 1) go(cur - 1);
+  });
+  fetch('/kerja/api/reports').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    var n = j ? j.reports.filter(function (r) { return r.status === 'menunggu'; }).length : 0;
+    document.getElementById('repPend').textContent = n ? String(n) : '';
+  }).catch(function () {});
+})();
+</script>
+<script type="module" src="/kerja/assets/kantor.js?v=107"></script>
 </body>
 </html>

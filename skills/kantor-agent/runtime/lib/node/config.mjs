@@ -1,6 +1,8 @@
 // Konfigurasi: defaults.json + penimpaan opsional <project>/.claude/kantor-agent.json (nama, judul).
 // Port PHP: lib/php/Config.php (harus identik — dicek bin/parity.mjs).
 import path from 'node:path';
+import { globalConfigFile } from './agents.mjs';
+import { orgFile, readOrg } from './org.mjs';
 import { isFile, isPlainObj, phpTrim, readText, values } from './util.mjs';
 
 export const CONFIG_REL = '.claude/kantor-agent.json';
@@ -31,8 +33,12 @@ export function loadDefaults(runtimeDir) {
 
 export function loadConfig(runtimeDir, projectDir) {
   const d = loadDefaults(runtimeDir);
-  const c = parse(path.join(projectDir, CONFIG_REL));
-  const n = isPlainObj(c.names) ? c.names : {};
+  // global (~/.claude/kantor-agent.json, diatur lewat /kerja/agen) lalu ditimpa project
+  const g = parse(globalConfigFile());
+  const p = parse(path.join(projectDir, CONFIG_REL));
+  const c = { ...g, ...p, names: { ...(isPlainObj(g.names) ? g.names : {}), ...(isPlainObj(p.names) ? p.names : {}) } };
+  const n = c.names;
+  const ag = values(c.agents);
   const team = values(n.team);
   const fl = [];
   for (const v of values(n.freelancers)) {
@@ -41,8 +47,11 @@ export function loadConfig(runtimeDir, projectDir) {
   }
   return {
     title: cleanName(c.title, 60) ?? (cleanName(path.basename(projectDir), 60) ?? 'Project'),
-    ketua: cleanName(n.ketua) ?? d.ketua,
+    // nama Ketua = CEO dari struktur organisasi (bila sudah diatur)
+    ketua: (isFile(orgFile()) ? cleanName(readOrg().ceo.name) : null) ?? cleanName(n.ketua) ?? d.ketua,
     team: d.team.map((def, i) => cleanName(team[i]) ?? def),
+    // agent khusus per meja tim (nama agent / agentType); null = menerima tugas apa pun
+    agents: d.team.map((_, i) => cleanName(ag[i], 100)),
     freelancers: fl.length ? fl : d.freelancers,
     colors: d.colors,
     window_days: num(d.window_days, 7),

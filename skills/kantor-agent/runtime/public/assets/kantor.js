@@ -7,15 +7,20 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-const API = '/kerja/api/state';
+const API = '/kerja/api/state' + location.search; // ?lantai=N
 const POLL_MS = 3000;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CFG = window.KANTOR || {};
-const TEAM_NAMES = Array.isArray(CFG.team) && CFG.team.length === 4 ? CFG.team : ['Budi', 'Sari', 'Agus', 'Rina'];
+// lantai divisi bisa punya 0–4 anggota di meja tim (sisanya datang sebagai freelancer)
+// maks 15 anggota tetap per lantai (ditambah Ketua); >4 memakai tata letak meja rapat (3 baris)
+const TEAM_NAMES = Array.isArray(CFG.team) && CFG.team.length <= 15 ? CFG.team : ['Budi', 'Sari', 'Agus', 'Rina'];
+const COMPACT = TEAM_NAMES.length > 4;
+const KETUA_ROLE = typeof CFG.ketua_role === 'string' ? CFG.ketua_role : 'Ketua';
+const TEAM_ROLES = Array.isArray(CFG.team_roles) ? CFG.team_roles : [];
 const KETUA_NAME = typeof CFG.ketua === 'string' ? CFG.ketua : 'Joko';
 const COLORS = CFG.colors || { ketua: '#6a55c9', team: ['#3f6fd1', '#2f9a6d', '#d9772f', '#c2417a'], freelancers: ['#0f8fa3'] };
 const NAMES_SIG = [KETUA_NAME, ...TEAM_NAMES].join('|');
-const SPARE = Math.max(0, Math.min(4, Number(CFG.spare_desks) || 4));
+const SPARE_CFG = Math.max(0, Math.min(4, Number(CFG.spare_desks) || 4));
 
 // ---------------------------------------------------------------- bantuan umum
 const $ = (id) => document.getElementById(id);
@@ -200,6 +205,23 @@ const SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial
 const MONO = 'ui-monospace, Menlo, Consolas, monospace';
 const V = (x, z) => new THREE.Vector3(x, 0, z);
 
+// ---------------------------------------------------------------- tema ruangan per divisi
+// Tiap lantai punya warna dinding/lantai, papan nama ruangan, dan zona perlengkapan khas sesuai pekerjaannya.
+const THEMES = {
+  direksi: { label: 'Ruang Direksi & HRD', wall: '#efe8dc', hue: 28, sat: 34, lig: 56, accent: '#6a55c9' },
+  marketing: { label: 'Studio Marketing', wall: '#fbe9e4', hue: 24, sat: 42, lig: 66, accent: '#e4572e' },
+  finance: { label: 'Ruang Keuangan', wall: '#e6efe8', hue: 32, sat: 22, lig: 52, accent: '#1f8a5b' },
+  'business-development': { label: 'Ruang Strategi Bisnis', wall: '#e3eef0', hue: 30, sat: 30, lig: 60, accent: '#0b7a75' },
+  operasional: { label: 'Gudang & Ruang Operasional', wall: '#e9e6e1', hue: 0, sat: 0, lig: 58, accent: '#c0392b', concrete: true },
+  sales: { label: 'Ruang Sales & Layanan Pelanggan', wall: '#fbf2dc', hue: 34, sat: 40, lig: 64, accent: '#d4a017' },
+  creative: { label: 'Studio Kreatif & Produksi', wall: '#efe6f4', hue: 0, sat: 0, lig: 82, accent: '#8e44ad', concrete: true },
+  'it-digital': { label: 'Ruang IT & Server', wall: '#dfe7f0', hue: 210, sat: 8, lig: 40, accent: '#2471a3', concrete: true },
+  'legal-ga': { label: 'Ruang Legal & Umum', wall: '#ece7df', hue: 18, sat: 40, lig: 38, accent: '#566573' },
+  umum: { label: '', wall: '#f1ebe2', hue: 30, sat: 38, lig: 62, accent: '#6a55c9' },
+};
+const THEME_ID = THEMES[CFG.theme] ? CFG.theme : 'umum';
+const THEME = THEMES[THEME_ID];
+
 // ---------------------------------------------------------------- ruangan
 const ROOM = { x0: -10, x1: 10, z0: -7, z1: 6, h: 5.2 };
 const CORRIDOR_Z = -2.1;
@@ -211,7 +233,7 @@ const CORRIDOR_Z = -2.1;
     let x = -Math.floor(r() * 300);
     while (x < 1024) {
       const w = 260 + r() * 260;
-      fl.ctx.fillStyle = `hsl(${30 + r() * 6}, ${38 + r() * 8}%, ${62 + r() * 10}%)`;
+      fl.ctx.fillStyle = `hsl(${THEME.hue + r() * 6}, ${THEME.sat + (THEME.sat ? r() * 8 : 0)}%, ${THEME.lig + r() * (THEME.concrete ? 4 : 10)}%)`;
       fl.ctx.fillRect(x, y, w, plankH);
       fl.ctx.fillStyle = 'rgba(90,60,30,.10)';
       for (let g = 0; g < 5; g++) fl.ctx.fillRect(x, y + 8 + r() * 48, w, 1.5);
@@ -234,7 +256,7 @@ const CORRIDOR_Z = -2.1;
   const slab = mesh(new THREE.BoxGeometry(W + 0.6, 0.35, D + 0.6), mat('#d8cdbf', 0.9), { cast: false });
   slab.position.set(cx, -0.18, cz - 0.15);
   scene.add(slab);
-  const wallM = mat('#f1ebe2', 0.95);
+  const wallM = mat(THEME.wall, 0.95);
   const back = mesh(new THREE.BoxGeometry(W + 0.6, ROOM.h, 0.3), wallM, { cast: false });
   back.position.set(cx, ROOM.h / 2, ROOM.z0 - 0.15);
   scene.add(back);
@@ -767,6 +789,282 @@ const LOUNGE_PADS = [];
   scene.add(lounge, tvCorner(4.9, 0, -1.3));
 })();
 
+// ---------------------------------------------------------------- dekorasi khas divisi
+// Zona bebas: depan-tengah (x −2.4…3.2, z 3.2…5.7) dan sisi kanan (x 7.6…9.7, z 0.2…4.6).
+(function buildThemeDecor() {
+  if (THEME_ID === 'umum') return;
+  const A = THEME.accent;
+  // back=true: papan utama dipasang di dinding belakang kanan (di atas pojok kopi) agar terlihat dari kamera
+  const add = (o, x, y, z, ry = 0, back = false) => {
+    if (back) { const w = o.geometry?.parameters?.width || 2.5; o.scale.setScalar(Math.min(1, 2.4 / w)); x = 8.35; y = 3.25; z = ROOM.z0 + 0.03; ry = 0; }
+    o.position.set(x, y, z); o.rotation.y = ry; scene.add(o); return o;
+  };
+  const blk = (w, h, d, c, r = 0.8, m = 0) => mesh(box(w, h, d, 0.02), mat(c, r, m));
+  const cyl = (rt, rb, h, c, r = 0.6, m = 0, seg = 20) => mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(c, r, m));
+  const glow = (c) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
+  // gambar kanvas sebagai panel (poster, layar, papan)
+  function panel(w, h, cw, ch, draw, { lit = false } = {}) {
+    const t = canvasTex(cw, ch);
+    draw(t.ctx, cw, ch);
+    t.tex.needsUpdate = true;
+    const m = lit ? new THREE.MeshBasicMaterial({ map: t.tex, toneMapped: false }) : new THREE.MeshStandardMaterial({ map: t.tex, roughness: 0.6 });
+    return mesh(new THREE.PlaneGeometry(w, h), m, { cast: false });
+  }
+  const txt = (ctx, s, x, y, size, color = '#222', weight = 700, align = 'center') => {
+    ctx.fillStyle = color; ctx.font = `${weight} ${size}px ${SANS}`; ctx.textAlign = align; ctx.fillText(s, x, y);
+  };
+  // papan nama ruangan di dinding kanan
+  const sign = panel(3.2, 0.62, 1024, 200, (c, w, h) => {
+    c.fillStyle = A; roundRect(c, 0, 0, w, h, 36); c.fill();
+    txt(c, THEME.label, w / 2, 128, 76, '#fff', 800);
+  }, { lit: true });
+  add(sign, ROOM.x1 - 0.02, 3.6, 2.4, -Math.PI / 2);
+  // karpet zona depan berwarna aksen
+  const zr = mesh(new THREE.PlaneGeometry(5.2, 2.5).rotateX(-Math.PI / 2), mat(A, 1), { cast: false });
+  zr.material = zr.material.clone(); zr.material.transparent = true; zr.material.opacity = 0.28;
+  add(zr, 0.4, 0.011, 4.45);
+
+  const shelfUnit = (x, z, ry, color, items) => {
+    const g = new THREE.Group();
+    for (const s of [-0.58, 0.58]) { const p = blk(0.05, 1.9, 0.45, color); p.position.set(s, 0.95, 0); g.add(p); }
+    for (const y of [0.1, 0.7, 1.3, 1.88]) { const p = blk(1.2, 0.04, 0.45, color); p.position.set(0, y, 0); g.add(p); }
+    items(g);
+    return add(g, x, 0, z, ry);
+  };
+  const roadCase = (w, h, d, c = '#2b2d33') => {
+    const g = new THREE.Group();
+    const b = blk(w, h, d, c, 0.5, 0.2); b.position.y = h / 2; g.add(b);
+    for (const [ex, ez] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const k = blk(0.07, h + 0.01, 0.07, '#b8bcc4', 0.3, 0.8); k.position.set(ex * (w / 2 - 0.02), h / 2, ez * (d / 2 - 0.02)); g.add(k);
+    }
+    const hd = blk(0.18, 0.03, 0.05, '#9aa0a8', 0.3, 0.8); hd.position.set(0, h - 0.06, d / 2 + 0.02); g.add(hd);
+    return g;
+  };
+  const tripod = (h = 1.5) => {
+    const g = new THREE.Group();
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const l = cyl(0.012, 0.012, h, '#2a2c30', 0.4, 0.5, 8);
+      l.position.set(Math.sin(a) * 0.18, h / 2, Math.cos(a) * 0.18); l.rotation.set(Math.cos(a) * 0.14, 0, -Math.sin(a) * 0.14); g.add(l);
+    }
+    return g;
+  };
+  const softbox = (c = '#fffdf6') => {
+    const g = tripod(1.6);
+    const b = mesh(new THREE.ConeGeometry(0.42, 0.45, 4, 1, true), mat('#1f2024', 0.7)); b.rotation.set(Math.PI / 2, Math.PI / 4, 0); b.position.set(0, 1.85, 0.1); g.add(b);
+    const f = mesh(new THREE.PlaneGeometry(0.58, 0.58), glow(c), { cast: false }); f.position.set(0, 1.85, 0.33); g.add(f);
+    return g;
+  };
+  const camera = () => {
+    const g = tripod(1.3);
+    const body = blk(0.24, 0.16, 0.12, '#1c1d21', 0.5); body.position.set(0, 1.4, 0); g.add(body);
+    const lens = cyl(0.055, 0.06, 0.14, '#2a2b30', 0.4, 0.3, 18); lens.rotation.x = Math.PI / 2; lens.position.set(0, 1.4, 0.12); g.add(lens);
+    return g;
+  };
+  const monitor = (w, h, draw) => {
+    const g = new THREE.Group();
+    const fr = blk(w + 0.04, h + 0.04, 0.03, '#17181c', 0.4); g.add(fr);
+    const s = panel(w, h, 512, Math.round(512 * h / w), draw, { lit: true }); s.position.z = 0.017; g.add(s);
+    const st = cyl(0.015, 0.015, 0.22, '#2a2c30', 0.4, 0.5, 8); st.position.set(0, -h / 2 - 0.11, -0.03); g.add(st);
+    return g;
+  };
+  const deskTop = (w, d, c = '#e8e0d3') => {
+    const g = new THREE.Group();
+    const t = blk(w, 0.05, d, c, 0.5); t.position.y = 0.75; g.add(t);
+    for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const l = cyl(0.025, 0.025, 0.75, '#4a4d55', 0.4, 0.6, 8); l.position.set(x * (w / 2 - 0.06), 0.375, z * (d / 2 - 0.06)); g.add(l); }
+    return g;
+  };
+  const chart = (c, w, h, bars, color) => {
+    c.fillStyle = '#fff'; c.fillRect(0, 0, w, h);
+    const bw = w / (bars.length * 1.6);
+    bars.forEach((v, i) => { c.fillStyle = color; c.fillRect(w * 0.1 + i * bw * 1.6, h * 0.9 - v * h * 0.7, bw, v * h * 0.7); });
+    c.strokeStyle = '#999'; c.lineWidth = 3; c.beginPath(); c.moveTo(w * 0.08, h * 0.9); c.lineTo(w * 0.95, h * 0.9); c.stroke();
+  };
+
+  const T = {
+    direksi() {
+      // lemari piala, bendera, bagan organisasi
+      shelfUnit(8.6, 3.9, -Math.PI / 2, '#6b4a33', (g) => {
+        for (let i = 0; i < 3; i++) {
+          const cup = cyl(0.09, 0.05, 0.22, '#d9b44a', 0.25, 0.9); cup.position.set(-0.35 + i * 0.35, 0.86, 0); g.add(cup);
+          const base = blk(0.12, 0.08, 0.12, '#3a2a1d'); base.position.set(-0.35 + i * 0.35, 0.76, 0); g.add(base);
+        }
+        const plq = blk(0.5, 0.36, 0.04, '#8a6a3a', 0.4, 0.4); plq.position.set(0, 1.5, -0.1); g.add(plq);
+      });
+      const pole = cyl(0.02, 0.02, 2.4, '#c9c9c9', 0.3, 0.8, 10); add(pole, 9.4, 1.2, 1.0);
+      const flag = panel(0.8, 0.54, 120, 80, (c, w, h) => { c.fillStyle = '#d22'; c.fillRect(0, 0, w, h / 2); c.fillStyle = '#fff'; c.fillRect(0, h / 2, w, h / 2); });
+      add(flag, 9.4, 2.05, 1.42, -Math.PI / 2);
+      add(panel(2.6, 1.6, 900, 560, (c, w, h) => {
+        c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); txt(c, 'Struktur Organisasi', w / 2, 60, 46, '#333');
+        const box2 = (x, y, s) => { c.fillStyle = A; roundRect(c, x - 90, y - 30, 180, 56, 12); c.fill(); txt(c, s, x, y + 9, 26, '#fff'); };
+        box2(w / 2, 140, 'CEO'); box2(w / 2, 260, 'HRD');
+        ['Divisi', 'Divisi', 'Divisi', 'Divisi'].forEach((s, i) => box2(130 + i * 213, 420, s));
+        c.strokeStyle = '#888'; c.lineWidth = 3; c.beginPath(); c.moveTo(w / 2, 166); c.lineTo(w / 2, 230); c.moveTo(w / 2, 288); c.lineTo(w / 2, 350); c.moveTo(130, 350); c.lineTo(769, 350); c.stroke();
+      }), 0.4, 2.6, ROOM.z1 - 0.02, Math.PI, true);
+      add(deskTop(2.2, 0.9, '#5a3d29'), 0.6, 0, 4.6, Math.PI);
+      const ch = officeChair('#3b2d24'); add(ch, 0.6, 0, 5.4, Math.PI);
+    },
+    marketing() {
+      // dinding konten media sosial, ring light + HP, papan kampanye
+      add(panel(3.0, 1.7, 1024, 580, (c, w, h) => {
+        c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); txt(c, 'Kalender Konten', w / 2, 58, 44, '#333');
+        const cols = ['#e4572e', '#f3a712', '#29335c', '#a8c686', '#db2b39', '#669bbc'];
+        for (let i = 0; i < 12; i++) { c.fillStyle = cols[i % cols.length]; roundRect(c, 40 + (i % 6) * 162, 100 + Math.floor(i / 6) * 230, 140, 200, 14); c.fill(); c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(56 + (i % 6) * 162, 250 + Math.floor(i / 6) * 230, 108, 12); }
+      }), 0.4, 2.6, ROOM.z1 - 0.02, Math.PI, true);
+      const rl = tripod(1.5); const ring = mesh(new THREE.TorusGeometry(0.28, 0.035, 12, 40), glow('#fff6e0')); ring.position.set(0, 1.62, 0); rl.add(ring);
+      const phone = blk(0.08, 0.15, 0.01, '#111'); phone.position.set(0, 1.62, 0.01); rl.add(phone);
+      add(rl, 1.6, 0, 4.4, Math.PI);
+      add(deskTop(1.6, 0.8), -0.8, 0, 4.6, Math.PI);
+      add(monitor(0.8, 0.48, (c, w, h) => { c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); chart(c, w, h, [0.3, 0.45, 0.4, 0.65, 0.8, 0.95], '#e4572e'); txt(c, 'Engagement ↑', w / 2, 44, 34, '#e4572e'); }), -0.8, 1.06, 4.35, Math.PI);
+      add(officeChair('#e4572e'), -0.8, 0, 5.35, Math.PI);
+      ['#e4572e', '#f3a712', '#29335c'].forEach((col, i) => add(panel(0.7, 1.0, 140, 200, (c, w, h) => { c.fillStyle = col; c.fillRect(0, 0, w, h); txt(c, ['PROMO', 'NEW', 'IG'][i], w / 2, 110, 38, '#fff', 800); }), ROOM.x1 - 0.02, 1.8, 0.4 + i * 0.95 + (i > 1 ? 2.3 : 0), -Math.PI / 2));
+    },
+    finance() {
+      // lemari arsip, brankas, meja hitung dengan grafik
+      for (let i = 0; i < 3; i++) {
+        const g = new THREE.Group(); const b = blk(0.55, 1.3, 0.6, '#7d8a86', 0.5, 0.4); b.position.y = 0.65; g.add(b);
+        for (let k = 0; k < 4; k++) { const hd = blk(0.18, 0.03, 0.03, '#d0d5d3', 0.3, 0.8); hd.position.set(0, 0.2 + k * 0.3, 0.31); g.add(hd); }
+        add(g, ROOM.x1 - 0.4, 0, 0.6 + i * 0.62, -Math.PI / 2);
+      }
+      const safe = new THREE.Group(); const sb = blk(0.8, 0.9, 0.7, '#3d4245', 0.4, 0.6); sb.position.y = 0.45; safe.add(sb);
+      const dial = cyl(0.1, 0.1, 0.04, '#c9b37e', 0.3, 0.9, 24); dial.rotation.x = Math.PI / 2; dial.position.set(0, 0.55, 0.36); safe.add(dial);
+      add(safe, ROOM.x1 - 0.5, 0, 4.4, -Math.PI / 2);
+      add(deskTop(2.0, 0.85), 0.4, 0, 4.6, Math.PI);
+      add(monitor(0.9, 0.52, (c, w, h) => { chart(c, w, h, [0.5, 0.62, 0.58, 0.74, 0.86], '#1f8a5b'); txt(c, 'Laba Rugi', w / 2, 44, 34, '#1f8a5b'); }), 0.0, 1.08, 4.35, Math.PI);
+      const calc = blk(0.18, 0.03, 0.24, '#2c2f33'); add(calc, 0.9, 0.79, 4.6, 0.2);
+      for (let i = 0; i < 4; i++) add(blk(0.3, 0.04, 0.22, ['#f4f1e8', '#e9e4d6'][i % 2], 0.9), 1.15, 0.79 + i * 0.04, 4.45, 0.1 * i);
+      add(officeChair('#1f8a5b'), 0.4, 0, 5.4, Math.PI);
+      add(panel(2.4, 1.3, 800, 440, (c, w, h) => { chart(c, w, h, [0.35, 0.5, 0.48, 0.6, 0.72, 0.7, 0.85], '#1f8a5b'); txt(c, 'Arus Kas', w / 2, 50, 40, '#1f8a5b'); }), -1.6, 2.4, ROOM.z1 - 0.02, Math.PI, true);
+    },
+    'business-development'() {
+      // peta dunia, globe, layar presentasi pertumbuhan
+      add(panel(3.2, 1.7, 1024, 544, (c, w, h) => {
+        c.fillStyle = '#d7ecef'; c.fillRect(0, 0, w, h); c.fillStyle = '#7fb8a4';
+        for (const [x, y, rx, ry] of [[230, 200, 150, 90], [300, 380, 70, 110], [520, 190, 90, 70], [560, 330, 70, 110], [760, 220, 170, 100], [850, 410, 70, 45]]) { c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.fill(); }
+        c.fillStyle = '#c0392b'; for (const [x, y] of [[790, 340], [520, 200], [260, 210]]) { c.beginPath(); c.arc(x, y, 12, 0, 7); c.fill(); }
+        txt(c, 'Peta Peluang Ekspansi', w / 2, 52, 40, '#0b5a57');
+      }), 0.4, 2.6, ROOM.z1 - 0.02, Math.PI, true);
+      const globe = new THREE.Group(); const gs = mesh(new THREE.SphereGeometry(0.3, 24, 18), mat('#4f9fb8', 0.5)); gs.position.y = 1.15; globe.add(gs);
+      const ring = mesh(new THREE.TorusGeometry(0.34, 0.012, 8, 40), mat('#c9a84c', 0.3, 0.8)); ring.position.y = 1.15; ring.rotation.x = 0.4; globe.add(ring);
+      const st = cyl(0.03, 0.18, 0.85, '#6b4a33'); st.position.y = 0.42; globe.add(st);
+      add(globe, 8.6, 0, 3.8);
+      const scr = new THREE.Group(); const sc = panel(1.8, 1.05, 720, 420, (c, w, h) => { chart(c, w, h, [0.2, 0.35, 0.5, 0.68, 0.9], '#0b7a75'); txt(c, 'Roadmap Pertumbuhan', w / 2, 48, 36, '#0b7a75'); }, { lit: true });
+      sc.position.y = 1.5; scr.add(sc); const sl = cyl(0.02, 0.02, 1.0, '#555', 0.4, 0.6, 8); sl.position.set(0, 0.5, -0.02); scr.add(sl); const sf = cyl(0.3, 0.3, 0.03, '#555'); sf.position.y = 0.02; scr.add(sf);
+      add(scr, 8.4, 0, 1.4, -Math.PI / 2 + 0.2);
+      add(deskTop(1.8, 0.9), -0.6, 0, 4.6, Math.PI);
+      add(officeChair('#0b7a75'), -0.6, 0, 5.4, Math.PI);
+      add(officeChair('#0b7a75'), 1.2, 0, 4.6, -Math.PI / 2);
+    },
+    operasional() {
+      // unit photobooth, road case, rak alat, printer
+      const booth = new THREE.Group(); const bb = blk(0.55, 1.6, 0.45, '#f5f5f5', 0.4); bb.position.y = 0.8; booth.add(bb);
+      const bs = panel(0.4, 0.3, 256, 192, (c, w, h) => { c.fillStyle = '#111'; c.fillRect(0, 0, w, h); txt(c, 'SENYUM! 📸', w / 2, 110, 34, '#fff'); }, { lit: true }); bs.position.set(0, 1.15, 0.23); booth.add(bs);
+      const ringB = mesh(new THREE.TorusGeometry(0.17, 0.025, 10, 32), glow('#fffbe8')); ringB.position.set(0, 1.45, 0.24); booth.add(ringB);
+      const lens = cyl(0.04, 0.04, 0.05, '#111', 0.3, 0.2, 16); lens.rotation.x = Math.PI / 2; lens.position.set(0, 1.45, 0.25); booth.add(lens);
+      const slot = blk(0.25, 0.02, 0.05, '#222'); slot.position.set(0, 0.55, 0.23); booth.add(slot);
+      add(booth, 0.6, 0, 4.7, Math.PI);
+      add(roadCase(0.9, 0.6, 0.6), -1.2, 0, 4.9, Math.PI + 0.2);
+      add(roadCase(0.7, 0.5, 0.5, '#33363d'), -1.2, 0.6, 4.9, Math.PI - 0.1);
+      add(roadCase(1.1, 0.45, 0.5, '#2b2d33'), 2.2, 0, 5.0, Math.PI);
+      shelfUnit(ROOM.x1 - 0.35, 1.2, -Math.PI / 2, '#5d6168', (g) => {
+        for (let i = 0; i < 3; i++) { const b = blk(0.3, 0.22, 0.3, ['#c0392b', '#2b2d33', '#d9b44a'][i]); b.position.set(-0.35 + i * 0.35, 0.83, 0); g.add(b); }
+        for (let i = 0; i < 4; i++) { const r = cyl(0.07, 0.07, 0.25, '#f2f2f2', 0.6, 0, 14); r.rotation.z = Math.PI / 2; r.position.set(-0.3 + i * 0.2, 1.42, 0); g.add(r); }
+        const pr = blk(0.5, 0.3, 0.38, '#e3e3e3', 0.5); pr.position.set(0, 0.27, 0); g.add(pr);
+      });
+      shelfUnit(ROOM.x1 - 0.35, 2.6, -Math.PI / 2, '#5d6168', (g) => {
+        for (let i = 0; i < 3; i++) { const b = blk(0.32, 0.28, 0.35, '#2b2d33', 0.5, 0.2); b.position.set(-0.35 + i * 0.35, 0.27, 0); g.add(b); }
+        for (let i = 0; i < 2; i++) { const c2 = cyl(0.06, 0.06, 0.18, '#1c1d21'); c2.rotation.x = Math.PI / 2; c2.position.set(-0.2 + i * 0.4, 0.86, 0); g.add(c2); }
+      });
+      add(panel(2.6, 1.4, 900, 480, (c, w, h) => {
+        c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); txt(c, 'Jadwal Event Minggu Ini', w / 2, 56, 40, '#c0392b');
+        ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach((d, i) => { c.strokeStyle = '#ccc'; c.strokeRect(30 + i * 120, 90, 110, 360); txt(c, d, 85 + i * 120, 130, 28, '#555'); if ([2, 5, 6].includes(i)) { c.fillStyle = '#c0392b'; roundRect(c, 40 + i * 120, 170, 90, 70, 10); c.fill(); } });
+      }), -1.6, 2.6, ROOM.z1 - 0.02, Math.PI, true);
+    },
+    sales() {
+      // meja resepsionis, headset & telepon, papan target booking
+      const rec = new THREE.Group();
+      const front = blk(2.6, 1.05, 0.25, A, 0.5); front.position.set(0, 0.525, 0.35); rec.add(front);
+      const top = blk(2.7, 0.05, 0.85, '#f4efe4', 0.4); top.position.set(0, 1.07, 0.1); rec.add(top);
+      const logoP = panel(1.3, 0.3, 520, 120, (c, w, h) => { txt(c, 'Kelana Photobooth', w / 2, 80, 58, '#fff', 800); }, { lit: true }); logoP.position.set(0, 0.65, 0.48); rec.add(logoP);
+      const ph = blk(0.22, 0.07, 0.18, '#1d1f24'); ph.position.set(-0.8, 1.13, 0.0); rec.add(ph);
+      const hs = mesh(new THREE.TorusGeometry(0.1, 0.015, 8, 24, Math.PI), mat('#1d1f24', 0.5)); hs.position.set(0.7, 1.2, 0.0); rec.add(hs);
+      const mon = monitor(0.6, 0.36, (c, w, h) => { c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); txt(c, 'Chat Masuk: 12', w / 2, 60, 34, '#25a244'); txt(c, 'Booking hari ini: 3', w / 2, 120, 30, '#333'); }); mon.position.set(0, 1.4, -0.05); rec.add(mon);
+      add(rec, 0.4, 0, 4.4, Math.PI);
+      add(officeChair('#d4a017'), 0.4, 0, 3.6, 0);
+      add(panel(2.2, 1.4, 760, 480, (c, w, h) => {
+        c.fillStyle = '#fff'; c.fillRect(0, 0, w, h); txt(c, 'Target Booking Bulan Ini', w / 2, 60, 38, '#8a6a00');
+        c.fillStyle = '#eee'; roundRect(c, 60, 200, w - 120, 70, 35); c.fill(); c.fillStyle = A; roundRect(c, 60, 200, (w - 120) * 0.64, 70, 35); c.fill(); txt(c, '64%', w / 2, 360, 70, '#8a6a00', 800);
+      }), ROOM.x1 - 0.02, 2.0, 0.4, -Math.PI / 2);
+      for (let i = 0; i < 2; i++) { const s = officeChair('#b9a58c'); add(s, 8.6, 0, 3.3 + i * 1.0, -Math.PI / 2); }
+    },
+    creative() {
+      // sudut studio foto: backdrop gulung, softbox, kamera tripod, papan moodboard
+      const bd = new THREE.Group();
+      for (const s of [-1.3, 1.3]) { const p = cyl(0.025, 0.025, 2.6, '#2a2c30', 0.4, 0.6, 8); p.position.set(s, 1.3, 0); bd.add(p); }
+      const bar = cyl(0.03, 0.03, 2.7, '#2a2c30', 0.4, 0.6, 8); bar.rotation.z = Math.PI / 2; bar.position.y = 2.58; bd.add(bar);
+      const paper = mesh(new THREE.PlaneGeometry(2.5, 2.5), new THREE.MeshStandardMaterial({ color: '#f2d7e3', roughness: 0.95, side: THREE.DoubleSide }), { cast: false }); paper.position.set(0, 1.3, 0.02); bd.add(paper);
+      const sweep = mesh(new THREE.PlaneGeometry(2.5, 1.2).rotateX(-Math.PI / 2), mat('#f2d7e3', 0.95), { cast: false }); sweep.position.set(0, 0.012, 0.62); bd.add(sweep);
+      add(bd, 0.4, 0, 5.55, Math.PI);
+      add(softbox(), -1.6, 0, 4.1, Math.PI - 0.6);
+      add(softbox(), 2.4, 0, 4.1, Math.PI + 0.6);
+      add(camera(), 0.4, 0, 3.3, 0);
+      add(panel(2.6, 1.5, 900, 520, (c, w, h) => {
+        c.fillStyle = '#f7f2ea'; c.fillRect(0, 0, w, h); txt(c, 'Moodboard Tema Event', w / 2, 56, 40, '#6c3483');
+        const cols = ['#f2d7e3', '#d6c4e8', '#f7dc6f', '#a9cce3', '#f5b7b1', '#abebc6', '#d7bde2', '#fad7a0'];
+        cols.forEach((col, i) => { c.fillStyle = col; c.save(); c.translate(90 + (i % 4) * 210, 160 + Math.floor(i / 4) * 180); c.rotate((i % 3 - 1) * 0.06); c.fillRect(-80, -60, 170, 150); c.restore(); });
+      }), ROOM.x1 - 0.02, 2.0, 1.0, -Math.PI / 2);
+      add(deskTop(1.4, 0.7, '#f0ece6'), 8.6, 0, 3.9, -Math.PI / 2);
+      add(monitor(0.9, 0.52, (c, w, h) => { const gr = c.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#f2d7e3'); gr.addColorStop(1, '#8e44ad'); c.fillStyle = gr; c.fillRect(0, 0, w, h); c.strokeStyle = '#fff'; c.lineWidth = 8; c.strokeRect(w * 0.3, h * 0.12, w * 0.4, h * 0.76); txt(c, 'Frame', w / 2, h / 2 + 12, 34, '#fff'); }), 8.6, 1.1, 4.15, -Math.PI / 2);
+    },
+    'it-digital'() {
+      // rak server berlampu, meja multi-monitor, papan diagram jaringan
+      for (let r = 0; r < 2; r++) {
+        const g = new THREE.Group(); const cab = blk(0.7, 2.0, 0.8, '#1c1f26', 0.4, 0.5); cab.position.y = 1.0; g.add(cab);
+        for (let i = 0; i < 9; i++) {
+          const u = blk(0.6, 0.12, 0.02, '#2b303a', 0.4, 0.5); u.position.set(0, 0.25 + i * 0.19, 0.41); g.add(u);
+          for (let k = 0; k < 3; k++) { const led = mesh(new THREE.BoxGeometry(0.02, 0.02, 0.005), glow(['#3cff7a', '#3cb4ff', '#ffb43c'][(i + k + r) % 3])); led.position.set(-0.22 + k * 0.05, 0.25 + i * 0.19, 0.425); g.add(led); }
+        }
+        add(g, ROOM.x1 - 0.5, 0, 0.8 + r * 0.85, -Math.PI / 2);
+      }
+      add(deskTop(2.4, 0.85, '#2d3138'), 0.4, 0, 4.6, Math.PI);
+      [-0.55, 0.4, 1.35].forEach((x, i) => add(monitor(0.82, 0.48, (c, w, h) => {
+        c.fillStyle = '#0d1117'; c.fillRect(0, 0, w, h); c.font = `20px ${MONO}`;
+        for (let l = 0; l < 9; l++) { c.fillStyle = ['#7ee787', '#79c0ff', '#d2a8ff'][(l + i) % 3]; c.fillText(['const booking = await', 'if (ok) sync()', '200 OK /api/galeri', 'deploy: menunggu izin', 'backup: selesai ✓', 'uptime 99.9%'][(l + i) % 6], 16, 34 + l * 30); }
+      }), x, 1.1, 4.35, Math.PI + (i - 1) * 0.15));
+      add(officeChair('#2471a3'), 0.4, 0, 5.4, Math.PI);
+      add(panel(2.4, 1.4, 800, 470, (c, w, h) => {
+        c.fillStyle = '#f4f8fc'; c.fillRect(0, 0, w, h); txt(c, 'Arsitektur Sistem', w / 2, 52, 38, '#1a5276');
+        const n = [[400, 140, 'Website'], [180, 280, 'Booking'], [620, 280, 'Galeri QR'], [400, 400, 'Google Drive']];
+        c.strokeStyle = '#2471a3'; c.lineWidth = 4; c.beginPath(); for (const [x, y] of n.slice(1)) { c.moveTo(400, 140); c.lineTo(x, y); } c.moveTo(180, 280); c.lineTo(400, 400); c.moveTo(620, 280); c.lineTo(400, 400); c.stroke();
+        for (const [x, y, s] of n) { c.fillStyle = A; roundRect(c, x - 95, y - 30, 190, 60, 14); c.fill(); txt(c, s, x, y + 10, 26, '#fff'); }
+      }), -1.6, 2.6, ROOM.z1 - 0.02, Math.PI, true);
+      for (let i = 0; i < 3; i++) { const cb = cyl(0.015, 0.015, 1.4, ['#2471a3', '#c0392b', '#f1c40f'][i], 0.5, 0, 6); cb.rotation.z = Math.PI / 2; add(cb, 9.0, 0.03 + i * 0.03, 2.4 + i * 0.05, Math.PI / 2); }
+    },
+    'legal-ga'() {
+      // rak buku hukum, timbangan keadilan, lemari arsip, meja stempel
+      for (let s = 0; s < 2; s++) shelfUnit(ROOM.x1 - 0.3, 0.8 + s * 1.35, -Math.PI / 2, '#5a3d29', (g) => {
+        for (const y of [0.13, 0.73, 1.33]) for (let i = 0; i < 7; i++) { const b = blk(0.12, 0.42 + (i % 3) * 0.04, 0.3, ['#7b1e1e', '#1e3a5f', '#3d4f2a', '#5b3a1e'][(i + s) % 4], 0.8); b.position.set(-0.45 + i * 0.15, y + 0.22, 0); g.add(b); }
+      });
+      const sc = new THREE.Group(); const sp = cyl(0.02, 0.02, 0.6, '#c9a84c', 0.3, 0.9, 10); sp.position.y = 0.3; sc.add(sp);
+      const beam = cyl(0.012, 0.012, 0.6, '#c9a84c', 0.3, 0.9, 8); beam.rotation.z = Math.PI / 2; beam.position.y = 0.58; sc.add(beam);
+      for (const s of [-0.28, 0.28]) { const pan = cyl(0.1, 0.06, 0.03, '#c9a84c', 0.3, 0.9, 16); pan.position.set(s, 0.38, 0); sc.add(pan); }
+      const sbase = cyl(0.12, 0.14, 0.04, '#c9a84c', 0.3, 0.9, 16); sbase.position.y = 0.02; sc.add(sbase);
+      add(deskTop(2.0, 0.9, '#6b4a33'), 0.4, 0, 4.6, Math.PI);
+      add(sc, 1.0, 0.775, 4.55);
+      for (let i = 0; i < 5; i++) add(blk(0.3, 0.04, 0.22, '#f4f1e8', 0.9), -0.2, 0.79 + i * 0.04, 4.6, 0.08 * i);
+      const stamp = new THREE.Group(); const sh = cyl(0.03, 0.03, 0.1, '#5a3d29'); sh.position.y = 0.09; stamp.add(sh); const sf = blk(0.08, 0.04, 0.06, '#7b1e1e'); sf.position.y = 0.02; stamp.add(sf);
+      add(stamp, 0.3, 0.775, 4.3);
+      add(officeChair('#4a3b30'), 0.4, 0, 5.4, Math.PI);
+      for (let i = 0; i < 2; i++) { const g = new THREE.Group(); const b = blk(0.55, 1.3, 0.6, '#8a8f8c', 0.5, 0.4); b.position.y = 0.65; g.add(b); add(g, -1.8 + i * 0.62, 0, 5.4, Math.PI); }
+      add(panel(2.0, 1.3, 700, 455, (c, w, h) => {
+        c.fillStyle = '#fbf8f1'; c.fillRect(0, 0, w, h); txt(c, 'Register Kontrak & Izin', w / 2, 56, 34, '#566573');
+        for (let i = 0; i < 6; i++) { c.fillStyle = '#ddd'; c.fillRect(50, 100 + i * 55, w - 100, 3); txt(c, ['NIB/OSS', 'Merek Dagang', 'Kontrak Vendor', 'S&K Layanan', 'NDA Mitra', 'Asuransi Alat'][i], 60, 90 + i * 55, 24, '#333', 600, 'left'); c.fillStyle = i % 3 ? '#27ae60' : '#e67e22'; c.beginPath(); c.arc(w - 70, 82 + i * 55, 10, 0, 7); c.fill(); }
+      }), -0.2, 2.6, ROOM.z1 - 0.02, Math.PI, true);
+    },
+  };
+  T[THEME_ID]?.();
+})();
+
 // ---------------------------------------------------------------- papan dinding
 function wallBoard({ w, h, cw, ch, pos, rotY }) {
   const g = new THREE.Group();
@@ -1108,11 +1406,27 @@ function monitor(w, h) {
 // meja: A0 = Ketua, A1–A4 = tim, B0–B3 = meja cadangan freelancer
 const ROW_A_Z = -4.3;
 const ROW_B_Z = -0.7;
-const DESK_DEFS = [
-  { id: 'A0', x: -7.0, z: ROW_A_Z, kind: 'ketua', color: COLORS.ketua },
-  ...TEAM_NAMES.map((n, i) => ({ id: `A${i + 1}`, x: -4.2 + i * 2.8, z: ROW_A_Z, kind: 'tim', idx: i, color: COLORS.team[i % COLORS.team.length] })),
-  ...Array.from({ length: SPARE }, (_, j) => ({ id: `B${j}`, x: -7.0 + j * 2.8, z: ROW_B_Z, kind: 'spare', idx: j, color: '#9a938a', gap: [-8.6, -5.6, -2.8, 2.8][j] })),
+const ROW_C_Z = 2.0;
+// slot meja rapat: baris A 7, baris B 5, baris C 3 (lebar meja 1.9, jarak 2.2). gap = jalur lewat celah antar meja.
+const COMPACT_SLOTS = [
+  ...[-4.8, -2.6, -0.4, 1.8, 4.0, 6.2, 8.4].map((x) => ({ x, z: ROW_A_Z, row: 'A' })),
+  ...[-7.0, -4.8, -2.6, -0.4, 1.8].map((x) => ({ x, z: ROW_B_Z, row: 'B', gap: x - 1.1 })),
+  ...[[-2.6, -3.7], [-0.4, 0.7], [1.8, 2.9]].map(([x, gap]) => ({ x, z: ROW_C_Z, row: 'C', gap })),
 ];
+const DESK_DEFS = COMPACT ? (() => {
+  const out = [{ id: 'A0', x: -7.0, z: ROW_A_Z, row: 'A', kind: 'ketua', color: COLORS.ketua }];
+  let spare = 0;
+  COMPACT_SLOTS.forEach((sl, k) => {
+    if (k < TEAM_NAMES.length) out.push({ ...sl, id: `A${k + 1}`, kind: 'tim', idx: k, compact: true, color: COLORS.team[k % COLORS.team.length] });
+    else if (spare < SPARE_CFG) { out.push({ ...sl, id: `B${spare}`, kind: 'spare', idx: spare, compact: true, color: '#9a938a' }); spare++; }
+  });
+  return out;
+})() : [
+  { id: 'A0', x: -7.0, z: ROW_A_Z, row: 'A', kind: 'ketua', color: COLORS.ketua },
+  ...[0, 1, 2, 3].map((i) => ({ id: `A${i + 1}`, x: -4.2 + i * 2.8, z: ROW_A_Z, row: 'A', kind: 'tim', idx: i, color: COLORS.team[i % COLORS.team.length] })),
+  ...Array.from({ length: SPARE_CFG }, (_, j) => ({ id: `B${j}`, x: -7.0 + j * 2.8, z: ROW_B_Z, row: 'B', kind: 'spare', idx: j, color: '#9a938a', gap: [-8.6, -5.6, -2.8, 2.8][j] })),
+];
+const SPARE = DESK_DEFS.filter((d) => d.kind === 'spare').length;
 const desks = {};
 function drawPlate(d, name, role, css) {
   const np = d.plate;
@@ -1131,6 +1445,7 @@ function drawPlate(d, name, role, css) {
 function buildDesk(def) {
   const desk = new THREE.Group();
   desk.position.set(def.x, 0, def.z);
+  if (def.compact) desk.scale.x = 0.83;
   scene.add(desk);
   const boss = def.kind === 'ketua';
   const wood = mat(boss ? '#8f6647' : '#c9a27a', 0.55);
@@ -1195,8 +1510,8 @@ function buildDesk(def) {
   seat.add(officeChair(boss ? '#5a3f33' : '#3a3f4a'));
   const d = { ...def, group: desk, seat, main, side, deskMug, lamp, plate: np, data: null, who: null, sig: '', drawnAt: 0, plateSig: '' };
   desks[def.id] = d;
-  if (def.kind === 'ketua') drawPlate(d, KETUA_NAME, 'Ketua', def.color);
-  else if (def.kind === 'tim') drawPlate(d, TEAM_NAMES[def.idx], 'Tim', def.color);
+  if (def.kind === 'ketua') drawPlate(d, KETUA_NAME, KETUA_ROLE, def.color);
+  else if (def.kind === 'tim') drawPlate(d, TEAM_NAMES[def.idx] ?? 'Meja kosong', TEAM_NAMES[def.idx] ? TEAM_ROLES[def.idx] || 'Tim' : '', def.color);
   else drawPlate(d, `Meja cadangan ${def.idx + 1}`, 'Freelancer', def.color);
 }
 DESK_DEFS.forEach(buildDesk);
@@ -1207,21 +1522,23 @@ DESK_DEFS.forEach(buildDesk);
 const PLACES = {};
 for (const d of Object.values(desks)) {
   const seatPos = V(d.x, d.z + 0.95);
-  const spoke = d.z === ROW_A_Z ? [V(d.x, CORRIDOR_Z)] : [V(d.gap, CORRIDOR_Z), V(d.gap, 0.95), V(d.x, 0.95)];
+  const az = d.z + 1.65; // titik dekat kursi (di belakang kursi)
+  const spoke = d.row === 'A' ? [V(d.x, CORRIDOR_Z)] : [V(d.gap, CORRIDOR_Z), V(d.gap, az), V(d.x, az)];
   PLACES[`desk:${d.id}`] = { kind: 'desk', desk: d, pos: seatPos, heading: Math.PI, spoke };
 }
 const SPOTS = {
   tv: { pos: V(4.3, 1.25), heading: Math.PI, spoke: [V(3.2, CORRIDOR_Z), V(3.2, 1.05)], sit: 'sofa' },
   ps: { pos: V(5.5, 1.25), heading: Math.PI, spoke: [V(7.0, CORRIDOR_Z), V(6.9, 1.05)], sit: 'sofa' },
-  coffee: { pos: V(7.7, -5.55), heading: Math.PI, spoke: [V(7.2, CORRIDOR_Z), V(7.4, -5.0)] },
-  water: { pos: V(8.75, -5.45), heading: Math.PI / 2, spoke: [V(7.2, CORRIDOR_Z), V(7.4, -5.0)] },
-  window: { pos: V(3.5, -6.15), heading: Math.PI, spoke: [V(6.3, CORRIDOR_Z), V(6.3, -5.6)] },
+  coffee: { pos: V(7.7, -5.55), heading: Math.PI, spoke: [V(COMPACT ? 7.3 : 7.2, CORRIDOR_Z), V(7.4, -5.0)] },
+  water: { pos: V(8.75, -5.45), heading: Math.PI / 2, spoke: [V(COMPACT ? 7.3 : 7.2, CORRIDOR_Z), V(7.4, -5.0)] },
+  window: { pos: V(3.5, -6.15), heading: Math.PI, spoke: COMPACT ? [V(7.3, CORRIDOR_Z), V(7.3, -5.6), V(6.3, -5.6)] : [V(6.3, CORRIDOR_Z), V(6.3, -5.6)] },
   guitar: { pos: V(-1.4, 2.6), heading: 0.35, spoke: [V(2.8, CORRIDOR_Z), V(2.8, 1.7)] },
-  meet1: { pos: V(MEET.x + 0.585, MEET.z - 1.217), heading: -0.448, spoke: [V(-2.8, CORRIDOR_Z), V(-2.8, 1.2)], sit: 'chair' },
+  meet1: { pos: V(MEET.x + 0.585, MEET.z - 1.217), heading: -0.448, spoke: [V(COMPACT ? -3.7 : -2.8, CORRIDOR_Z), V(COMPACT ? -3.7 : -2.8, 1.2)], sit: 'chair' },
   meet2: { pos: V(MEET.x - 1.346, MEET.z + 0.103), heading: 1.648, spoke: [V(-8.6, CORRIDOR_Z), V(-8.6, 1.6), V(-7.6, 3.8)], sit: 'chair' },
-  meet3: { pos: V(MEET.x + 0.762, MEET.z + 1.114), heading: -2.54, spoke: [V(-2.8, CORRIDOR_Z), V(-2.8, 1.2), V(-3.3, 4.6)], sit: 'chair' },
+  meet3: { pos: V(MEET.x + 0.762, MEET.z + 1.114), heading: -2.54, spoke: [V(COMPACT ? -3.7 : -2.8, CORRIDOR_Z), V(COMPACT ? -3.7 : -2.8, 1.2), V(-3.3, 4.6)], sit: 'chair' },
   bookshelf: { pos: V(-8.9, 3.8), heading: -Math.PI / 2, spoke: [V(-8.6, CORRIDOR_Z), V(-8.6, 2.4)] },
 };
+if (COMPACT && TEAM_NAMES.length > 12) delete SPOTS.guitar; // baris C menempati sudut gitar
 for (const [id, s] of Object.entries(SPOTS)) PLACES[`spot:${id}`] = { kind: 'spot', spot: id, ...s };
 PLACES.door = { kind: 'door', pos: V(ROOM.x0 - 0.9, CORRIDOR_Z), heading: -Math.PI / 2, spoke: [V(ROOM.x0 + 0.6, CORRIDOR_Z)] };
 const SPOT_IDS = Object.keys(SPOTS);
@@ -1484,8 +1801,8 @@ function workMode(a) {
 }
 
 // Ketua + 4 anggota tim selalu ada
-const KETUA = makeActor({ key: 'ketua', kind: 'ketua', name: KETUA_NAME, role: 'Ketua', color: COLORS.ketua, look: LOOKS.ketua, desk: 'A0' });
-const TEAM = TEAM_NAMES.map((n, i) => makeActor({ key: `tim-${i}`, kind: 'tim', idx: i, name: n, role: 'Tim', color: COLORS.team[i % COLORS.team.length], look: LOOKS.team[i], desk: `A${i + 1}` }));
+const KETUA = makeActor({ key: 'ketua', kind: 'ketua', name: KETUA_NAME, role: KETUA_ROLE, color: COLORS.ketua, look: LOOKS.ketua, desk: 'A0' });
+const TEAM = TEAM_NAMES.map((n, i) => makeActor({ key: `tim-${i}`, kind: 'tim', idx: i, name: n, role: TEAM_ROLES[i] || 'Tim', color: COLORS.team[i % COLORS.team.length], look: LOOKS.team[i] || { ...freelancerLook(n, COLORS.team[i % COLORS.team.length]), backpack: false }, desk: `A${i + 1}` }));
 
 // ---------------------------------------------------------------- lounge: tempat unik per aktor + obrolan
 const LOUNGE = { chatAt: performance.now() + 4000 };
@@ -1639,7 +1956,7 @@ function updateDeskScreens(d, now) {
     sig = JSON.stringify([k?.state, k?.last?.[0]?.t, k?.tools, k?.todos?.at, a.walking, workMode(a)]);
   } else if (a) {
     sig = JSON.stringify([a.key, a.data?.state, a.data?.run?.id, a.data?.run?.last?.[0]?.t, a.data?.run?.tools, workMode(a)]);
-  } else sig = `idle:${d.kind === 'tim' ? JSON.stringify([TEAM[d.idx].data?.state, TEAM[d.idx].data?.run?.id]) : ''}`;
+  } else sig = `idle:${d.kind === 'tim' ? JSON.stringify([TEAM[d.idx]?.data?.state, TEAM[d.idx]?.data?.run?.id]) : ''}`;
   if (sig === d.sig && now - d.drawnAt < 20000) return;
   d.sig = sig;
   d.drawnAt = now;
@@ -1647,9 +1964,9 @@ function updateDeskScreens(d, now) {
     const k = a.data || {};
     if (k.state === 'bekerja' || k.state === 'selesai') {
       const mode = workMode(a);
-      const title = k.activity === 'menunggu-tim' ? `Menunggu ${k.waiting_on} subagent` : 'Sesi utama';
+      const title = k.activity === 'menunggu-tim' ? `Menunggu ${k.waiting_on} subagent` : (CFG.floor > 1 ? 'Tugas divisi' : 'Sesi utama');
       drawWorkScreen(d.main.scr, a, k.last, title, `${a.name} · ${STATE_UI[k.state]?.label || ''} · ${fmtNum.format(k.tools || 0)} aksi · ${fmtCompact.format(k.tokens || 0)} token`, mode);
-    } else drawIdleScreen(d.main.scr, `${a.name} · Santai`, k.updated ? `aktif terakhir ${ago(k.updated)}` : 'belum ada sesi', a.color, false);
+    } else drawIdleScreen(d.main.scr, `${a.name} · Santai`, k.updated ? `aktif terakhir ${ago(k.updated)}` : (CFG.floor > 1 ? 'menunggu tugas' : 'belum ada sesi'), a.color, false);
     drawTodoScreen(d.side.scr, k.todos);
     return;
   }
@@ -1660,7 +1977,10 @@ function updateDeskScreens(d, now) {
     drawTaskCard(d.side.scr, a, r);
     return;
   }
-  if (d.kind === 'tim') {
+  if (d.kind === 'tim' && !TEAM[d.idx]) {
+    drawIdleScreen(d.main.scr, 'Meja kosong', 'tambah anggota di Kelola', '#9a938a', true);
+    drawIdleScreen(d.side.scr, 'Kosong', '', '#9a938a', true);
+  } else if (d.kind === 'tim') {
     const m = TEAM[d.idx];
     drawIdleScreen(d.main.scr, `${m.name} · ${STATE_UI[m.data?.state || 'santai'].label}`, m.data?.run ? `terakhir: ${clip(m.data.run.task, 40)}` : 'menunggu tugas', m.color, false);
     drawIdleScreen(d.side.scr, 'Layar terkunci', '', m.color, true);
@@ -2010,16 +2330,16 @@ function renderUi(d, fresh) {
 
   // kartu
   const k = d.ketua;
-  const kLast = k.updated ? `aktif terakhir ${ago(k.updated)}` : 'belum ada sesi utama';
+  const kLast = k.updated ? `aktif terakhir ${ago(k.updated)}` : (CFG.floor > 1 ? 'menunggu tugas' : 'belum ada sesi utama');
   const kSub = k.other_sessions > 0 ? `+${k.other_sessions} sesi lain aktif`
     : k.activity === 'menunggu-tim' ? `Menunggu ${k.waiting_on} subagent`
       : k.state === 'santai' ? kLast : k.last?.[0]?.text || kLast;
-  const cards = [cardHtml({ key: 'ketua', name: KETUA_NAME, role: 'Ketua', color: COLORS.ketua, state: k.state, task: k.state === 'santai' ? 'Santai di lounge' : k.activity === 'alat' ? 'Menjalankan alat' : 'Sesi utama', act: kSub, working: k.state === 'bekerja' })];
+  const cards = [cardHtml({ key: 'ketua', name: KETUA_NAME, role: KETUA_ROLE, color: COLORS.ketua, state: k.state, task: k.state === 'santai' ? 'Santai di lounge' : k.activity === 'alat' ? 'Menjalankan alat' : (CFG.floor > 1 ? 'Tugas divisi' : 'Sesi utama'), act: kSub, working: k.state === 'bekerja' })];
   for (const m of d.team) {
     const r = m.run;
     const task = m.state === 'santai' ? (r ? `Terakhir: ${r.task}` : 'Santai di lounge') : r?.task || '';
     const act = m.state === 'bekerja' ? r?.last?.[0]?.text || 'Mulai bekerja…' : m.state === 'selesai' ? `Beres ${ago(r?.ended)}` : r ? `selesai ${ago(r.ended)}` : 'menunggu tugas';
-    cards.push(cardHtml({ key: m.key, name: m.name, role: 'Tim', color: m.color, state: m.state, task, act, working: m.state === 'bekerja' }));
+    cards.push(cardHtml({ key: m.key, name: m.name, role: TEAM_ROLES[m.slot] || 'Tim', color: m.color, state: m.state, task, act, working: m.state === 'bekerja' }));
   }
   const seated = d.freelancers.filter((f) => f.desk !== null && f.desk < SPARE);
   const extra = d.freelancers.filter((f) => f.desk === null || f.desk >= SPARE);
@@ -2033,7 +2353,7 @@ function renderUi(d, fresh) {
   }
   const el = $('cards');
   const n = cards.length;
-  el.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`;
+  el.style.gridTemplateColumns = n > 6 ? '' : `repeat(${n}, minmax(0, 1fr))`;
   el.classList.toggle('compact', n > 6);
   const html = cards.join('');
   if (el.innerHTML !== html) el.innerHTML = html;
