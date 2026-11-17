@@ -260,6 +260,18 @@ async function opsApi(req, res, p) {
     const ce = /^\/kerja\/api\/ops\/calendar\/(CAL-\d+)$/.exec(p);
     if (ce && req.method === 'PUT') return json(res, 200, KAL.updateEvent(ce[1], b, by, by === org.ceo.name || by === 'CEO'));
     if (p === '/kerja/api/ops/chat' && req.method === 'POST') {
+      // pesan CEO di ruang divisi yang berisi gambar, nominal uang, atau kata kerja perintah otomatis menjadi task + ada balasan
+      const roomKind = /^(div:|sub:)/.test(String(b.room || ''));
+      const text0 = String(b.text || '');
+      const workLike = !!(Array.isArray(b.images) && b.images.length) || /\bRp\.?\s?\d|\b\d[\d.]*\s?(rb|ribu|juta|jt)\b|\b(tolong|catat|buat(kan)?|siapkan|kerjakan|cek|update|revisi|ganti|bayar|transfer|pengeluaran|pemasukan|beli|langganan|invoice|tagih)\b/i.test(text0);
+      if (roomKind && workLike && !b.chatOnly) {
+        const r = OPS.createCommand({ ...b, text: text0 }, by, org);
+        for (const t of r.tasks) {
+          OPS.postMessage({ room: b.room, from: 'Sistem', role: 'Sistem', kind: 'system', task: t.id,
+            text: `✅ Diterima. Dicatat sebagai ${t.id} untuk ${t.division}${t.pic ? `, PIC ${t.pic}` : ''}. Status: menunggu diproses. Belum dikerjakan; Anda akan melihat "Dikerjakan oleh …" di dashboard begitu diambil.` });
+        }
+        return json(res, 201, { ...r.tasks[0], tasks: r.tasks, auto_task: true });
+      }
       const msg = OPS.postMessage({ ...b, from: by, role: b.role || 'CEO', auto: undefined });
       if (!msg.images?.length) CHATTER?.onCeoMessage(msg).catch(() => {});
       return json(res, 201, msg);
