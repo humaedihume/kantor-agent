@@ -711,23 +711,26 @@ export function releaseWork(id, by, note = '') {
 }
 export function queueList() {
   const W = { macet: 0, menunggu: 1, dikerjakan: 2 };
-  return listTasks().filter((t) => t.queue).map((t) => ({ task: t.id, title: t.title, pic: t.pic, division: t.division, priority: t.priority, deadline: t.deadline, ...t.queue }))
+  return listTasks().filter((t) => t.queue).map((t) => ({ task: t.id, title: t.title, pic: t.pic, division: t.division, priority: t.priority, deadline: t.deadline, ceo: t.source === 'perintah' || t.queue.kind === 'revisi', ...t.queue }))
     .sort((a, b) => W[a.state] - W[b.state] || byDeadline(a, b));
 }
 // untuk pemroses terjadwal / `hrd.mjs inbox`: pekerjaan yang belum diambil atau macet
 export function inbox() {
   return listTasks().filter((t) => t.queue && ['menunggu', 'macet'].includes(t.queue.state)).map((t) => ({
-    id: t.id, title: t.title, kind: t.queue.kind, state: t.queue.state, since: t.queue.since, priority: t.priority, deadline: t.deadline,
+    id: t.id, title: t.title, kind: t.queue.kind, state: t.queue.state, since: t.queue.since, priority: t.priority, deadline: t.deadline, ceo: t.source === 'perintah' || t.queue.kind === 'revisi',
     division: t.division, subdivision: t.subdivision, pic: t.pic, description: t.description, objective: t.objective, deliverables: t.deliverables,
     attachments: (t.attachments || []).map((n) => uploadFile(n)).filter(Boolean),
     revisions: (t.revisions || []).filter((r) => r.status === 'In Progress' && !r.asking && (t.queue.state === 'macet' || !r.claimed_by)),
     subtasks: (t.subtasks || []).map((s) => ({ no: s.no, title: s.title, agent: s.agent, agent_type: s.agent_type, status: s.status, output: s.output })),
   })).sort(byDeadline);
 }
-// aturan CEO: pekerjaan dengan deadline terdekat dikerjakan lebih dulu (tanpa deadline paling akhir), lalu prioritas, lalu yang paling lama menunggu
+// aturan CEO: permintaan CEO, deadline terdekat, dan pekerjaan terpenting dulu.
+// Urutan: (0) permintaan langsung CEO (perintah dari chat/revisi CEO), (1) yang sudah lewat atau jatuh tempo dalam 2 hari, (2) prioritas P0..P3, (3) deadline terdekat (tanpa deadline paling akhir), (4) paling lama menunggu
 function byDeadline(a, b) {
+  const soon = new Date(Date.now() + 2 * 86400e3).toLocaleDateString('sv-SE');
+  const hot = (x) => (x.deadline && x.deadline <= soon ? 0 : 1);
   const da = a.deadline || '9999-12-31', db = b.deadline || '9999-12-31';
-  return da.localeCompare(db) || String(a.priority).localeCompare(String(b.priority)) || String(a.since).localeCompare(String(b.since));
+  return (b.ceo ? 1 : 0) - (a.ceo ? 1 : 0) || hot(a) - hot(b) || String(a.priority).localeCompare(String(b.priority)) || da.localeCompare(db) || String(a.since).localeCompare(String(b.since));
 }
 
 // agent bertanya ke CEO per poin revisi; CEO menjawab di dashboard dan poin kembali ke antrean
