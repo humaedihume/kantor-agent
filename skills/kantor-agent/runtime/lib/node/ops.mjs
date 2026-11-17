@@ -711,8 +711,8 @@ export function releaseWork(id, by, note = '') {
 }
 export function queueList() {
   const W = { macet: 0, menunggu: 1, dikerjakan: 2 };
-  return listTasks().filter((t) => t.queue).map((t) => ({ task: t.id, title: t.title, pic: t.pic, division: t.division, priority: t.priority, ...t.queue }))
-    .sort((a, b) => W[a.state] - W[b.state] || String(a.since).localeCompare(String(b.since)));
+  return listTasks().filter((t) => t.queue).map((t) => ({ task: t.id, title: t.title, pic: t.pic, division: t.division, priority: t.priority, deadline: t.deadline, ...t.queue }))
+    .sort((a, b) => W[a.state] - W[b.state] || byDeadline(a, b));
 }
 // untuk pemroses terjadwal / `hrd.mjs inbox`: pekerjaan yang belum diambil atau macet
 export function inbox() {
@@ -722,7 +722,12 @@ export function inbox() {
     attachments: (t.attachments || []).map((n) => uploadFile(n)).filter(Boolean),
     revisions: (t.revisions || []).filter((r) => r.status === 'In Progress' && !r.asking && (t.queue.state === 'macet' || !r.claimed_by)),
     subtasks: (t.subtasks || []).map((s) => ({ no: s.no, title: s.title, agent: s.agent, agent_type: s.agent_type, status: s.status, output: s.output })),
-  })).sort((a, b) => a.priority.localeCompare(b.priority) || String(a.since).localeCompare(String(b.since)));
+  })).sort(byDeadline);
+}
+// aturan CEO: pekerjaan dengan deadline terdekat dikerjakan lebih dulu (tanpa deadline paling akhir), lalu prioritas, lalu yang paling lama menunggu
+function byDeadline(a, b) {
+  const da = a.deadline || '9999-12-31', db = b.deadline || '9999-12-31';
+  return da.localeCompare(db) || String(a.priority).localeCompare(String(b.priority)) || String(a.since).localeCompare(String(b.since));
 }
 
 // agent bertanya ke CEO per poin revisi; CEO menjawab di dashboard dan poin kembali ke antrean
